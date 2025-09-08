@@ -7,7 +7,6 @@
             "name": "Debug Any Binary (probe-rs-debug)",
             "cwd": "${workspaceFolder}",
             "connectUnderReset": true,
-            "chip": "STM32F446RE",
             "flashingConfig": {
                 "flashingEnabled": true,
                 "haltAfterReset": true

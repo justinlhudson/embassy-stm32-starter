@@ -56,11 +56,6 @@ The setup script automatically updates **4 critical files**:
 | `.cargo/config.toml` | Build configuration | Target, runner, debug settings |
 
 
-### Memory Layout
-```
-Flash (0x08000000): [████████████████████████████████] 512 KB
-RAM   (0x20000000): [████████████████████████████████] 128 KB
-```
 
 ### Configuration Architecture
 ```
@@ -69,6 +64,14 @@ config/              # Configuration management
 ├── memory/          # MCU memory layouts (e.g., stm32f446re.x)
 board.rs             # Board-specific pin config (copied by setup.sh)
 ```
+
+
+## 🖥️ VS Code Support
+
+This project includes a pre-configured `.vscode` directory for Visual Studio Code, providing recommended settings and launch configurations for embedded development.
+
+### Debugging
+The included VS Code setup provides launch configurations for debugging embedded targets using `probe-rs` and RTT logging. Simply open the project in VS Code, connect your board, and use the Run & Debug panel to start a debug session.
 
 ## 📁 Project Structure
 
@@ -82,12 +85,12 @@ embassy_stm32_starter/
 │   └── 📄 config.toml            # 🔄 Active build settings (managed by setup.sh)
 ├── 📂 config/                    # 📂 Configuration management directory
 │   ├── 📂 templates/             # 📋 MCU-specific configuration templates
-│   │   ├── 📄 Cargo_nucleo_f446re.toml     # STM32F446RE dependencies
-│   │   ├── 📄 config_nucleo_f446re.toml    # STM32F446RE build settings
-│   │   └── 📄 [future_mcu_templates]       # Additional MCU templates
+│   │   ├── 📄 Cargo.template.toml        # Cargo.toml template
+│   │   ├── 📄 config.template.toml       # config.toml template
+│   │   └── 📄 board.template.rs          # Board config template
 │   ├── 📂 memory/                # 💾 MCU memory layout definitions
-│   │   ├── 📄 stm32f446re.x          # STM32F446RE memory map
-│   │   └── 📄 [future_mcu_layouts]   # Additional MCU memory files
+│   │   ├── 📄 stm32f413zh.x           # STM32F413ZH memory map
+│   │   ├── 📄 stm32f446re.x           # STM32F446RE memory map
 │   # (Board-specific pin config is copied to board.rs by setup.sh)
 ├── 📂 src/
 │   ├── 📄 lib.rs                 # Library root & inline module declarations
@@ -141,9 +144,7 @@ embassy_stm32_starter/
 2. **Verify Connection**: 
    ```bash
    probe-rs list
-   # Should show: STM32F446RETx
    ```
-3. **Driver Installation**: Usually automatic, but see [ST-LINK drivers](https://www.st.com/en/development-tools/st-link-v2.html) if needed
 
 ## 🚀 Building & Flashing
 
