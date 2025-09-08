@@ -41,7 +41,6 @@ fi
 # Configure based on board selection
 case "$BOARD" in
     "nucleo"|"nucleo-f446re")
-        MEMORY_LAYOUT="config/memory/stm32f446re.x"
         BOARD_CONFIG="src/boards/nucleo_f446re.rs"
         BOARD_DESCRIPTION="STM32F446RE Nucleo board"
         BOARD_NAME="STM32F446RE Nucleo board"
@@ -52,7 +51,6 @@ case "$BOARD" in
         STM32_EMBASSY_FEATURE="stm32f446re"
         ;;
     "nucleo144"|"nucleo-144"|"nucleo144-f413zh")
-        MEMORY_LAYOUT="config/memory/stm32f413zh.x"
         BOARD_CONFIG="src/boards/nucleo144_f413zh.rs"
         BOARD_DESCRIPTION="STM32F413ZH Nucleo-144 board"
         BOARD_NAME="STM32F413ZH Nucleo-144 board"
@@ -92,14 +90,9 @@ substitute_template() {
 
 echo "🎯 Configuring for $BOARD_NAME ($MCU_NAME)"
 
-# Copy the appropriate memory layout to memory.x
-if [[ -f "$MEMORY_LAYOUT" ]]; then
-    cp "$MEMORY_LAYOUT" "memory.x"
-    echo "✅ Updated memory.x from $MEMORY_LAYOUT"
-else
-    echo "❌ Memory layout file not found: $MEMORY_LAYOUT"
-    exit 1
-fi
+# Remove old config/memory file logic and variable
+# Remove old config/memory files if they exist (cleanup)
+rm -f config/memory/stm32f413zh.x config/memory/stm32f446re.x
 
 # Copy memory.template.x and only uncomment the correct MEMORY block, never the board name
 MEMORY_TEMPLATE="memory.template.x"
@@ -135,7 +128,7 @@ fi
 
 # Generate .cargo/config.toml from template
 mkdir -p .cargo
-if substitute_template ".cargo/config.template/config.template.toml" ".cargo/config.toml"; then
+if substitute_template ".cargo/config.template.toml" ".cargo/config.toml"; then
     echo "✅ Generated .cargo/config.toml from template"
 else
     echo "❌ Failed to generate .cargo/config.toml from template"

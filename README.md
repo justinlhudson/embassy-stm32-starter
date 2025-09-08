@@ -57,12 +57,16 @@ The setup script automatically updates **5 critical files**:
 
 | File | Purpose | Contents |
 |------|---------|----------|
-| `memory.x` | Linker memory layout | Flash/RAM sizes and addresses |
-| `board.rs` | Board-specific pins | LED pins, button pins, configurations |
-| `Cargo.toml` | MCU dependencies | Embassy features, chip-specific crates |
-| `.cargo/config.toml` | Build configuration | Target, runner, debug settings |
-| `.vscode/launch.json` | VS Code debug config | `"chip": "{{CHIP_NAME}}"` is replaced with the selected board's chip |
-| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for launch.json; contains `"chip": "{{CHIP_NAME}}"` |
+| `memory.x` | Linker memory layout | Flash/RAM sizes and addresses (generated from `memory.template.x`) |
+| `memory.template.x` | Linker memory layout template | Contains all board memory configs, only one active at a time |
+| `board.rs` | Board-specific pins | LED pins, button pins, configurations (generated from `board.template.rs`) |
+| `board.template.rs` | Board config template | Used as the source for `board.rs` |
+| `Cargo.toml` | MCU dependencies | Embassy features, chip-specific crates (generated from `Cargo.template.toml`) |
+| `Cargo.template.toml` | Cargo config template | Used as the source for `Cargo.toml` |
+| `.cargo/config.toml` | Build configuration | Target, runner, debug settings (generated from `.cargo/config.template/config.template.toml`) |
+| `.cargo/config.template/config.template.toml` | Build config template | Used as the source for `.cargo/config.toml` |
+| `.vscode/launch.json` | VS Code debug config | `"chip": "..."` is set for the selected board (generated from `.vscode/launch.template.json`) |
+| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for `launch.json`; contains `"chip": "{{CHIP_NAME}}"` |
 
 
 
