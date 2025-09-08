@@ -26,7 +26,7 @@ The project uses a **template-based configuration system** that automatically ma
 # Show help and available options
 ./setup --help
 
-> Note: `setup` now defaults to the `nucleo` board if no argument is given.
+> Note: `setup` defaults to the `nucleo` board if no argument is given.
 ```
 
 #### **What Gets Configured**
@@ -38,7 +38,7 @@ The setup script automatically updates **5 critical files**:
 | `board.template.rs` | Board config template | Used as the source for `board.rs` |
 | `Cargo.template.toml` | Cargo config template | Used as the source for `Cargo.toml` |
 | `.cargo/config.template.toml` | Build config template | Used as the source for `.cargo/config.toml` |
-| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for `launch.json`; contains `"chip": "{{CHIP_NAME}}"` |
+| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for `launch.json` |
 
 ## 🖥️ VS Code Support
 
