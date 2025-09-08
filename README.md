@@ -89,17 +89,6 @@ The setup script automatically updates **4 critical files**:
 | `Cargo.toml` | MCU dependencies | Embassy features, chip-specific crates |
 | `.cargo/config.toml` | Build configuration | Target, runner, debug settings |
 
-### STM32F446RE Specifications
-| Specification | Value | Description |
-|---------------|--------|-------------|
-| **Architecture** | ARM Cortex-M4F | 32-bit RISC with FPU |
-| **Clock Speed** | Up to 180 MHz | High-performance operation |
-| **Flash Memory** | 512 KB | Program storage |
-| **SRAM** | 128 KB | Runtime memory |
-| **GPIO Pins** | Up to 114 | Digital I/O capabilities |
-| **Timers** | 14 timers | PWM, delays, scheduling |
-| **ADC** | 3x 12-bit | Analog input conversion |
-| **Communication** | UART, SPI, I2C, CAN, USB | Multiple interface options |
 
 ### Memory Layout
 ```
@@ -148,14 +137,6 @@ embassy_stm32_starter/
 └── 📂 tests/                     # Integration tests
     └── 📄 integration.rs         # Hardware testing
 ```
-
-### Key Components
-
-- `setup.sh`: Single-command MCU/board config switching
-- `config/`: Templates and memory layouts
-- `board.rs`: Board pin config (copied by setup.sh)
-- `src/hardware/`: HAL (GPIO, timers, etc.)
-- `src/common/`: Application logic (tasks, patterns)
 - `src/bin/`: Binaries (e.g., blinky.rs)
 
 ## 🛠️ Setup & Installation
@@ -258,19 +239,6 @@ The project supports easy switching between different MCU configurations:
 # ./setup.sh custom     # Your custom board configuration
 ```
 
-### Configuration Validation
-After switching boards, verify the configuration:
-
-```bash
-# Check what board is currently configured
-cat board.rs | grep -A5 "BoardConfig"
-
-# Verify memory layout
-head -10 memory.x
-
-# Check MCU features in Cargo.toml
-grep -A5 "embassy-stm32" Cargo.toml
-```
 
 ### Understanding Board Files
 Each board configuration in `boards/` contains:
@@ -295,120 +263,8 @@ impl BoardConfig {
 }
 ```
 
-## 🔄 Adding New MCUs
-
-### Step-by-Step MCU Addition
-
-#### 1. **Create Memory Layout**
-Add your MCU's memory layout to `config/memory/`:
-
-```bash
-# Example: config/memory/stm32f407vg.x
-MEMORY
-{
-  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 1024K
-  RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 128K
-}
-```
-
-#### 2. **Create Board Configuration**
-Add board-specific pins to your board configuration file (copied to `board.rs`):
-
-```bash
-# Example: board.rs (for STM32F407 Discovery)
-use embassy_stm32::gpio::{Level, Pull};
-
 pub struct BoardConfig;
-
-impl BoardConfig {
-    pub const LED_PIN: &'static str = "PD12";
-    pub const LED_ACTIVE_LEVEL: Level = Level::High;
-    pub const BUTTON_PIN: &'static str = "PA0";
-    pub const BUTTON_PULL: Pull = Pull::Down;
-    pub const BOARD_NAME: &'static str = "STM32F407 Discovery";
-}
-
-// STM32F407-specific interrupt handlers (if needed)
-#[unsafe(no_mangle)]
-extern "C" fn YOUR_INTERRUPT_NAME() {}
-```
-
-#### 3. **Create MCU-Specific Templates**
-Add MCU configuration templates to `config/templates/`:
-
-**Cargo template** (`config/templates/Cargo_discovery_f407.toml`):
-```toml
-[dependencies.embassy-stm32]
-version = "0.1.0"
-features = [
-    "defmt",
-    "stm32f407vg",          # ← MCU-specific feature
-    "memory-x", 
-    "time-driver-tim4",
-    "exti",
-    "chrono"
-]
-```
-
-**Config template** (`config/templates/config_discovery_f407.toml`):
-```toml
-[build]
 target = "thumbv7em-none-eabihf"
-
-[target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-rs run --chip STM32F407VGTx"  # ← MCU-specific chip name
-rustflags = ["-C", "link-arg=-Tlink.x"]
-```
-
-#### 4. **Update Setup Script**
-Add your board to `setup.sh`:
-
-```bash
-# Add case for your board
-"discovery")
-    MEMORY_FILE="config/memory/stm32f407vg.x"
-    BOARD_FILE="board.rs"
-    CARGO_TEMPLATE="config/templates/Cargo_discovery_f407.toml"
-    CONFIG_TEMPLATE="config/templates/config_discovery_f407.toml"
-    ;;
-```
-
-#### 5. **Test Your Configuration**
-```bash
-# Test the new board configuration
-./setup.sh discovery
-cargo check --bin blinky
-cargo build --bin blinky
-```
-
-### MCU Configuration Checklist
-- [ ] Memory layout created in `config/memory/`
-- [ ] Board configuration created (including interrupt handlers if needed)
-- [ ] Cargo template created in `config/templates/`
-- [ ] Config template created in `config/templates/`
-- [ ] Setup script updated with new case
-- [ ] Build test successful
-- [ ] Hardware test successful
-
-### Advanced Configuration
-For more complex boards, you can extend the `BoardConfig` with additional constants:
-
-```rust
-impl BoardConfig {
-    // Multiple LEDs
-    pub const LED1_PIN: &'static str = "PD12";
-    pub const LED2_PIN: &'static str = "PD13";
-    pub const LED3_PIN: &'static str = "PD14";
-    pub const LED4_PIN: &'static str = "PD15";
-    
-    // External oscillator
-    pub const HSE_FREQ: u32 = 8_000_000; // 8 MHz
-    
-    // Custom board features
-    pub const HAS_USER_BUTTON: bool = true;
-    pub const HAS_ACCELEROMETER: bool = true;
-}
-```
 
 ## 🧪 Testing
 
