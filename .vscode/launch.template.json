@@ -7,6 +7,7 @@
             "name": "Debug Any Binary (probe-rs-debug)",
             "cwd": "${workspaceFolder}",
             "connectUnderReset": true,
+            "chip": "{{CHIP_NAME}}", // This value will be replaced by the setup script
             "flashingConfig": {
                 "flashingEnabled": true,
                 "haltAfterReset": true
@@ -17,8 +18,7 @@
                     "programBinary": "./target/thumbv7em-none-eabihf/debug/${input:binaryName}"
                 }
             ]
-        },
-
+        }
     ],
     "inputs": [
         {

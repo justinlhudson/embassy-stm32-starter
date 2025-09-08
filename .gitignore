@@ -6,3 +6,4 @@ memory.x
 board.rs
 Cargo.toml
 .cargo/config.toml
+.vscode/launch.json

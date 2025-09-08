@@ -1,4 +1,3 @@
-
 # 🚀 Multi-MCU Embassy Framework - Embedded Rust Project
 
 A modern, async embedded Rust project demonstrating real-time system capabilities using the Embassy framework on multiple STM32 microcontrollers. Features **automatic MCU configuration management**, hardware abstraction layers, task management, and comprehensive peripheral control with **single-command board switching**.
@@ -35,8 +34,15 @@ The project uses a **template-based configuration system** that automatically ma
 
 #### **Quick Board Switch** 🚀
 ```bash
-# Switch to STM32F446RE Nucleo board
-./setup.sh nucleo
+
+
+# Example: configure for STM32F446RE Nucleo board
+./setup nucleo
+
+# Show help and available options
+./setup --help
+
+> Note: `setup` now defaults to the `nucleo` board if no argument is given. Use `./setup --help` to see available options.
 
 # Output:
 # ✅ Updated memory.x
@@ -45,8 +51,9 @@ The project uses a **template-based configuration system** that automatically ma
 # ✅ Updated .cargo/config.toml
 ```
 
+
 #### **What Gets Configured**
-The setup script automatically updates **4 critical files**:
+The setup script automatically updates **5 critical files**:
 
 | File | Purpose | Contents |
 |------|---------|----------|
@@ -54,6 +61,8 @@ The setup script automatically updates **4 critical files**:
 | `board.rs` | Board-specific pins | LED pins, button pins, configurations |
 | `Cargo.toml` | MCU dependencies | Embassy features, chip-specific crates |
 | `.cargo/config.toml` | Build configuration | Target, runner, debug settings |
+| `.vscode/launch.json` | VS Code debug config | `"chip": "{{CHIP_NAME}}"` is replaced with the selected board's chip |
+| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for launch.json; contains `"chip": "{{CHIP_NAME}}"` |
 
 
 
@@ -62,7 +71,7 @@ The setup script automatically updates **4 critical files**:
 config/              # Configuration management
 ├── templates/       # MCU-specific config templates (Cargo.toml, config.toml)
 ├── memory/          # MCU memory layouts (e.g., stm32f446re.x)
-board.rs             # Board-specific pin config (copied by setup.sh)
+board.rs             # Board-specific pin config (copied by setup)
 ```
 
 
@@ -71,18 +80,19 @@ board.rs             # Board-specific pin config (copied by setup.sh)
 This project includes a pre-configured `.vscode` directory for Visual Studio Code, providing recommended settings and launch configurations for embedded development.
 
 ### Debugging
-The included VS Code setup provides launch configurations for debugging embedded targets using `probe-rs` and RTT logging. Simply open the project in VS Code, connect your board, and use the Run & Debug panel to start a debug session.
+
+The included VS Code setup provides launch configurations for debugging embedded targets using `probe-rs` and RTT logging. The `chip` field in `.vscode/launch.json` is automatically set by the setup script to match your selected board (using the `{{CHIP_NAME}}` template variable). Simply open the project in VS Code, connect your board, and use the Run & Debug panel to start a debug session.
 
 ## 📁 Project Structure
 
 ```
 embassy_stm32_starter/
-├── 📄 setup.sh                   # 🎯 MCU configuration management script
-├── 📄 Cargo.toml                 # 🔄 Active project configuration (managed by setup.sh)
-├── 📄 memory.x                   # 🔄 Active memory layout (managed by setup.sh) 
-├── 📄 board.rs                   # 🔄 Active board configuration (managed by setup.sh)
+├── 📄 setup                      # 🎯 MCU configuration management script
+├── 📄 Cargo.toml                 # 🔄 Active project configuration (managed by setup)
+├── 📄 memory.x                   # 🔄 Active memory layout (managed by setup) 
+├── 📄 board.rs                   # 🔄 Active board configuration (managed by setup)
 ├──  .cargo/
-│   └── 📄 config.toml            # 🔄 Active build settings (managed by setup.sh)
+│   └── 📄 config.toml            # 🔄 Active build settings (managed by setup)
 ├── 📂 config/                    # 📂 Configuration management directory
 │   ├── 📂 templates/             # 📋 MCU-specific configuration templates
 │   │   ├── 📄 Cargo.template.toml        # Cargo.toml template
@@ -91,7 +101,7 @@ embassy_stm32_starter/
 │   ├── 📂 memory/                # 💾 MCU memory layout definitions
 │   │   ├── 📄 stm32f413zh.x           # STM32F413ZH memory map
 │   │   ├── 📄 stm32f446re.x           # STM32F446RE memory map
-│   # (Board-specific pin config is copied to board.rs by setup.sh)
+│   # (Board-specific pin config is copied to board.rs by setup)
 ├── 📂 src/
 │   ├── 📄 lib.rs                 # Library root & inline module declarations
 │   ├── 📂 hardware/              # Hardware Abstraction Layer (HAL)
@@ -154,8 +164,9 @@ embassy_stm32_starter/
 git clone <repository-url>
 cd embassy_stm32_starter
 
-# Configure for STM32F446RE Nucleo board
-./setup.sh nucleo
+
+# Configure for STM32F446RE Nucleo board (auto-updates all config files and VS Code debug chip)
+./setup nucleo
 
 # Build the project
 cargo build --bin blinky

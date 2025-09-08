@@ -125,4 +125,16 @@ else
     exit 1
 fi
 
+# Always copy the launch template before replacing the chip field
+LAUNCH_TEMPLATE=".vscode/launch.template.json"
+LAUNCH_FILE=".vscode/launch.json"
+if [[ -f "$LAUNCH_TEMPLATE" ]]; then
+    cp "$LAUNCH_TEMPLATE" "$LAUNCH_FILE"
+    # Replace the chip field using the template variable (robust to trailing commas/comments)
+    sed -i '' "s/\("chip"\): \"{{CHIP_NAME}}\".*/\1: \"$CHIP_NAME\",/" "$LAUNCH_FILE"
+    echo "✅ Updated $LAUNCH_FILE chip field to $CHIP_NAME"
+else
+    echo "⚠️  $LAUNCH_TEMPLATE not found; skipping chip update."
+fi
+
 echo "🔨 Ready to build with: cargo build --bin blinky"
