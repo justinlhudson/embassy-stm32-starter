@@ -3,8 +3,6 @@
 
 A modern, async embedded Rust project demonstrating real-time system capabilities using the Embassy framework on multiple STM32 microcontrollers. Features **automatic MCU configuration management**, hardware abstraction layers, task management, and comprehensive peripheral control with **single-command board switching**.
 
-A modern, async embedded Rust project demonstrating real-time system capabilities using the Embassy framework on multiple STM32 microcontrollers. Features **automatic MCU configuration management**, hardware abstraction layers, task management, and comprehensive peripheral control with **single-command board switching**.
-
 ## 📋 Table of Contents
 
 - [Hardware Requirements](#-hardware-requirements)
@@ -12,7 +10,6 @@ A modern, async embedded Rust project demonstrating real-time system capabilitie
 - [Project Structure](#-project-structure)
 - [Setup & Installation](#️-setup--installation)
 - [Building & Flashing](#-building--flashing)
-- [Board Configuration](#️-board-configuration)
 - [Testing](#-testing)
 - [License](#-license)
 
@@ -104,7 +101,6 @@ embassy_stm32_starter/
 └── 📂 tests/                     # Integration tests
     └── 📄 integration.rs         # Hardware testing
 ```
-- `src/bin/`: Binaries (e.g., blinky.rs)
 
 ## 🛠️ Setup & Installation
 
@@ -167,52 +163,6 @@ cargo build --bin blinky
 cargo run --bin blinky
 ```
 
-### Build Profiles
-```bash
-# Development build (debug symbols, RTT logging)
-cargo build --bin blinky
-
-# Release build (size optimized, no debug)
-cargo build --release --bin blinky
-
-# Check binary size
-cargo bloat --release --bin blinky
-```
-
-### Advanced Flashing
-```bash
-# Flash without running
-probe-rs download --chip STM32F446RE target/thumbv7em-none-eabihf/debug/blinky
-
-# Flash and attach debugger
-probe-rs attach --chip STM32F446RE
-
-# Reset target
-probe-rs reset --chip STM32F446RE
-```
-
-## ⚙️ Board Configuration
-
-### Switching Between Boards
-The project supports easy switching between different MCU configurations:
-
-```bash
-# Switch to STM32F446RE Nucleo board (default)
-./setup.sh nucleo
-
-# Future board support examples:
-# ./setup.sh discovery  # STM32F407 Discovery board
-# ./setup.sh bluepill   # STM32F103 Blue Pill board
-# ./setup.sh custom     # Your custom board configuration
-```
-
-
-### Understanding Board Files
-pub struct BoardConfig;
-pub struct BoardConfig;
-target = "thumbv7em-none-eabihf"
-The active board configuration is always in `board.rs` (copied by `setup.sh`).
-
 ## 🧪 Testing
 
 ### Hardware-in-the-Loop Tests
@@ -233,8 +183,6 @@ This project is licensed under either of
 
 at your option.
 
-### Contribution Licensing
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## 👤 Author
 
@@ -243,23 +191,3 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 - GitHub: [@justinlhudson](https://github.com/justinlhudson)
 
 ---
-
-**Built with ❤️ using [Embassy](https://embassy.dev/), [Rust](https://www.rust-lang.org/), and ☕**
-
-*For questions or support, please open an issue on GitHub.*
-
-## ⚡ Quick Commands Reference
-
-```bash
-# Essential commands for this project:
-./setup.sh nucleo              # Configure for STM32F446RE
-cargo build --bin blinky       # Build application
-cargo run --bin blinky         # Flash and run with logging
-cargo check                    # Quick syntax check
-probe-rs list                  # Verify hardware connection
-
-# Development commands:
-cargo clippy                   # Code quality check
-cargo fmt                      # Format code
-cargo test --test integration  # Run hardware tests
-```
