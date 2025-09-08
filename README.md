@@ -13,7 +13,7 @@
 - **Format**: GNU LD linker scripts defining Flash/RAM regions
 - **Usage**: Copied to root `memory.x` by setup script
 
-#### 📟 **Board Configurations** (`config/boards/`)
+#### 📟 **Board Configurations** (`board.rs`)
 - **Purpose**: Board-specific pin mappings, settings, and interrupt handlers
 - **Format**: Rust modules with const definitions and interrupt handlers
 - **Usage**: Copied to root `board.rs` by setup script
@@ -39,60 +39,28 @@ A modern, async embedded Rust project demonstrating real-time system capabilitie
 
 ## 🎯 Features
 
-### MCU Configuration Management
-- 🎯 **Single-Command Board Switching** - `./setup.sh nucleo` configures entire project
-- 📋 **Template-Based Configuration** - MCU-specific Cargo.toml, config.toml, memory layouts
-- 🔄 **Automatic File Management** - Updates memory.x, board.rs, Cargo.toml, .cargo/config.toml
-- 🏗️ **Extensible Architecture** - Easy addition of new MCUs and boards
-- 📁 **Organized Structure** - Consolidated configuration directory with all board-specific files
-- 🧹 **Clean Module Organization** - Inline module declarations, no `mod.rs` files
-
-### Core Functionality
-- ✨ **Async/Await Support** - Built on Embassy's async runtime
-- 🔄 **Multi-Task Architecture** - Concurrent LED blinking, button monitoring, heartbeat, and RTC tasks
-- 🛡️ **Watchdog Protection** - Independent watchdog timer for system reliability
-- ⚡ **Real-Time Performance** - Deterministic timing with Embassy's executor
-- 📡 **RTT Logging** - Real-time transfer debugging with `defmt`
-
-### Hardware Abstractions
-- 🔌 **GPIO Management** - Clean abstractions for LEDs and buttons
-- ⏱️ **Timer Utilities** - Configurable delays and timing constants
-- 🎛️ **Board-Agnostic Code** - Generic application code with board-specific configurations
-- 🕐 **RTC Integration** - Real-time clock with timestamp logging
-
-### Development Features
-- 🔍 **Structured Logging** - Comprehensive debug output via RTT
-- 🧩 **Modular Design** - Separate hardware and application layers
-- 📊 **Memory Optimization** - Size-optimized release builds
-- 🔬 **Integration Tests** - Hardware-in-the-loop testing support
-- 🧹 **Clean Organization** - No `mod.rs` files, inline module declarations, consolidated configs
+- **Single-command board switching** and template-based configuration (`./setup.sh <board>`)
+- **Async/await multitasking** with Embassy's runtime
+- **Board-agnostic, modular code**: hardware abstraction, generic tasks, and easy MCU/board addition
+- **Automatic config management**: memory.x, board.rs, Cargo.toml, .cargo/config.toml
+- **RTT logging** and structured debug output via `defmt`
+- **Watchdog, RTC, GPIO, and timer utilities**
+- **Integration tests** and size-optimized release builds
 
 ## 🔧 Hardware Requirements
 
-### Currently Supported Boards
+### Supported Boards
 
-#### **STM32 Nucleo-F446RE Development Board** ⭐
-- � **Default Configuration** - Ready to use out of the box
-- 🌟 **Fully Tested** - Primary development target
-- 💰 **Cost-effective** - ~$15 USD
-- 🔌 **USB-powered** - No external power supply needed
-- 🔗 **Built-in ST-LINK/V2-1** - Programming and debugging interface
+- **STM32 Nucleo-F446RE** (default, fully tested, USB-powered, built-in ST-LINK)
+- Easy expansion: STM32F4, F7, H7, G4 series (see [Adding New MCUs](#-adding-new-mcus))
 
-### Board Components Used
+**Board Components:**
+
 | Component | Pin | Function | Description |
 |-----------|-----|----------|-------------|
-| **User LED (LD2)** | `PA5` | Status indicator | Green LED for visual feedback |
-| **User Button (B1)** | `PC13` | Input control | Blue tactile button |
-| **ST-LINK** | USB | Debug interface | Programming, RTT, and debugging |
-
-### Expandable MCU Support
-The project architecture supports easy addition of new STM32 families:
-- **STM32F4 Series** - F401, F407, F411, F446 variants ready for addition
-- **STM32F7 Series** - High-performance Cortex-M7 (planned support)  
-- **STM32H7 Series** - Dual-core high-performance (planned support)
-- **STM32G4 Series** - Mixed-signal MCUs (planned support)
-
-*To add support for your board, see [Adding New MCUs](#-adding-new-mcus) section.*
+| **User LED (LD2)** | `PA5` | Status indicator | Green LED |
+| **User Button (B1)** | `PC13` | Input control | Blue button |
+| **ST-LINK** | USB | Debug interface | Programming, RTT, debug |
 
 ## ⚡ MCU Configuration System
 
@@ -141,17 +109,10 @@ RAM   (0x20000000): [███████████████████�
 
 ### Configuration Architecture
 ```
-config/              # 📂 Configuration management directory
-├── templates/       # MCU-specific configuration templates
-│   ├── Cargo_nucleo_f446re.toml      # Dependencies & features
-│   ├── config_nucleo_f446re.toml     # Build & debug settings
-│   └── [future MCU templates]
-├── memory/          # MCU memory layouts  
-│   ├── stm32f446re.x    # F446RE memory map
-│   └── [future MCU memory files]
-└── boards/          # Board-specific pin configurations
-    ├── nucleo_f446re.rs # Nucleo F446RE pin mappings
-    └── [future board files]
+config/              # Configuration management
+├── templates/       # MCU-specific config templates (Cargo.toml, config.toml)
+├── memory/          # MCU memory layouts (e.g., stm32f446re.x)
+board.rs             # Board-specific pin config (copied by setup.sh)
 ```
 
 ## 📁 Project Structure
@@ -162,8 +123,7 @@ embassy_stm32_starter/
 ├── 📄 Cargo.toml                 # 🔄 Active project configuration (managed by setup.sh)
 ├── 📄 memory.x                   # 🔄 Active memory layout (managed by setup.sh) 
 ├── 📄 board.rs                   # 🔄 Active board configuration (managed by setup.sh)
-├── 📄 build.rs                   # Build configuration
-├── 📂 .cargo/
+├──  .cargo/
 │   └── 📄 config.toml            # 🔄 Active build settings (managed by setup.sh)
 ├── 📂 config/                    # 📂 Configuration management directory
 │   ├── 📂 templates/             # 📋 MCU-specific configuration templates
@@ -191,42 +151,12 @@ embassy_stm32_starter/
 
 ### Key Components
 
-#### 🎯 **Configuration Management** (`setup.sh`)
-- **Purpose**: Single-command MCU configuration switching
-- **Function**: Copies templates to active configuration files
-- **Usage**: `./setup.sh <board_name>`
-
-#### 📋 **Template System** (`templates/`)
-- **Purpose**: MCU-specific configuration templates
-- **Components**: Cargo.toml and config.toml variants for each MCU
-- **Benefits**: Version-controlled, consistent configurations
-
-#### � **Memory Layouts** (`memory/`)
-- **Purpose**: MCU-specific memory definitions for linker
-- **Format**: GNU LD linker scripts defining Flash/RAM regions
-- **Usage**: Copied to root `memory.x` by setup script
-
-#### 📟 **Board Configurations** (`boards/`)
-- **Purpose**: Board-specific pin mappings and settings
-- **Format**: Rust modules with const definitions
-- **Usage**: Copied to root `board.rs` by setup script
-
-#### 🔩 **Hardware Abstraction** (`src/hardware/`)
-- **Purpose**: Generic interfaces to STM32 peripherals
-- **Components**: GPIO controls, timing utilities, board-agnostic functions  
-- **Organization**: Inline module declarations in `lib.rs` (no `mod.rs` files)
-- **Benefits**: Portable, testable application code
-
-#### 🎯 **Application Layer** (`src/common/`)  
-- **Purpose**: Business logic and reusable task definitions
-- **Components**: LED patterns, button handlers, system monitoring
-- **Organization**: Inline module declarations in `lib.rs` (no `mod.rs` files)
-- **Benefits**: MCU-agnostic tasks, clear separation of concerns
-
-#### 🚀 **Binary Applications** (`src/bin/`)
-- **Purpose**: Executable applications using board-agnostic code
-- **Components**: Hardware initialization, task orchestration
-- **Benefits**: Generic code works across all supported MCUs
+- `setup.sh`: Single-command MCU/board config switching
+- `config/`: Templates and memory layouts
+- `board.rs`: Board pin config (copied by setup.sh)
+- `src/hardware/`: HAL (GPIO, timers, etc.)
+- `src/common/`: Application logic (tasks, patterns)
+- `src/bin/`: Binaries (e.g., blinky.rs)
 
 ## 🛠️ Setup & Installation
 
@@ -382,10 +312,10 @@ MEMORY
 ```
 
 #### 2. **Create Board Configuration**
-Add board-specific pins to `config/boards/`:
+Add board-specific pins to your board configuration file (copied to `board.rs`):
 
 ```bash
-# Example: config/boards/discovery_f407.rs
+# Example: board.rs (for STM32F407 Discovery)
 use embassy_stm32::gpio::{Level, Pull};
 
 pub struct BoardConfig;
@@ -437,7 +367,7 @@ Add your board to `setup.sh`:
 # Add case for your board
 "discovery")
     MEMORY_FILE="config/memory/stm32f407vg.x"
-    BOARD_FILE="config/boards/discovery_f407.rs"
+    BOARD_FILE="board.rs"
     CARGO_TEMPLATE="config/templates/Cargo_discovery_f407.toml"
     CONFIG_TEMPLATE="config/templates/config_discovery_f407.toml"
     ;;
@@ -453,7 +383,7 @@ cargo build --bin blinky
 
 ### MCU Configuration Checklist
 - [ ] Memory layout created in `config/memory/`
-- [ ] Board configuration created in `config/boards/` (including interrupt handlers if needed)
+- [ ] Board configuration created (including interrupt handlers if needed)
 - [ ] Cargo template created in `config/templates/`
 - [ ] Config template created in `config/templates/`
 - [ ] Setup script updated with new case
@@ -543,11 +473,11 @@ No RTT data received
 - **STM32CubeMX** for peripheral reference (optional)
 
 ### Best Practices
-1. **Version Control**: Commit frequently, use meaningful messages
-2. **Code Quality**: Run `cargo clippy` and `cargo fmt` before commits
-3. **Testing**: Test on hardware regularly, not just in simulation
-4. **Documentation**: Keep README and code comments up to date
-5. **Performance**: Profile with `cargo bloat` to monitor binary size
+- Commit frequently, use meaningful messages
+- Run `cargo clippy` and `cargo fmt` before commits
+- Test on hardware regularly
+- Keep docs and code comments up to date
+- Profile with `cargo bloat` for size
 
 ## 🤝 Contributing
 
