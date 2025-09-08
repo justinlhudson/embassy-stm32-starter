@@ -1,0 +1,7 @@
+/target
+Cargo.lock
+
+# Files generated/modified by setup.sh - these are board-specific configurations
+memory.x
+Cargo.toml
+.cargo/config.toml

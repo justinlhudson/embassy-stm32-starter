@@ -1,0 +1,48 @@
+[package]
+edition = "2024"
+authors = ["Justin L. Hudson <justinlhudson@gmail.com>"]
+name = "embassy-stm32-starter"
+version = "0.0.1"
+license = "MIT OR Apache-2.0"
+
+[lib]
+harness = false
+
+[[bin]]
+name = "blinky"
+test = false
+bench = false
+
+[build-dependencies]
+cc = ">=1.2.35"  # gcc for build.rs
+
+[dependencies]
+cortex-m = { version = ">=0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = ">=0.7.5"
+defmt = ">=1.0.1"
+defmt-rtt = ">=1.0.0"
+panic-probe = { version = ">=1.0.0", features = ["print-defmt"] }
+chrono = { version = ">=0.4.41", default-features = false}
+stm32f4xx-hal = { version = "0.22.1", features = ["{{STM32_HAL_FEATURE}}"] }
+embassy-stm32 = { version = ">=0.4.0", features = ["defmt", "{{STM32_EMBASSY_FEATURE}}", "memory-x", "time-driver-tim4", "exti", "chrono"] }
+embassy-sync = { version = ">=0.7.2", features = ["defmt"] }
+embassy-executor = { version = ">=0.9.1", features = ["defmt", "arch-cortex-m", "executor-thread", "executor-interrupt"] }
+embassy-time = { version = ">=0.5.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+
+[[test]]
+name = "integration"
+harness = false
+
+[dev-dependencies]
+semihosting = ">=0.1.20"  # for tests only
+
+[profile.dev]
+opt-level = 0 # no optimizations
+codegen-units = 1 # compile as single unit
+debug = true # full debug info (required for RTT)
+
+[profile.release]
+opt-level = 's' # optimize for size
+codegen-units = 1 # compile as single unit
+lto = 'fat' # link time optimizations
+debug = false # no debug (no RTT in release)
