@@ -101,8 +101,24 @@ else
     exit 1
 fi
 
+# Copy memory.template.x and only uncomment the correct MEMORY block, never the board name
+MEMORY_TEMPLATE="memory.template.x"
+MEMORY_FILE="memory.x"
+if [[ -f "$MEMORY_TEMPLATE" ]]; then
+    cp "$MEMORY_TEMPLATE" "$MEMORY_FILE"
+    if [[ "$BOARD" == "nucleo" || "$BOARD" == "nucleo-f446re" ]]; then
+        awk '/\/\* STM32F446RE \(Nucleo-64\) \*\// {print; inblock=1; next} /\/\* STM32F413ZH \(Nucleo-144\) \*\// {inblock=0} inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next} inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next} {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
+    elif [[ "$BOARD" == "nucleo144" || "$BOARD" == "nucleo-144" || "$BOARD" == "nucleo144-f413zh" ]]; then
+        awk '/\/\* STM32F413ZH \(Nucleo-144\) \*\// {print; inblock=1; next} /\/\* STM32F446RE \(Nucleo-64\) \*\// {inblock=0} inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next} inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next} {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
+    fi
+    echo "✅ Updated $MEMORY_FILE for $BOARD"
+else
+    echo "❌ $MEMORY_TEMPLATE not found."
+    exit 1
+fi
+
 # Generate board.rs from template
-if substitute_template "config/templates/board.template.rs" "board.rs"; then
+if substitute_template "board.template.rs" "board.rs"; then
     echo "✅ Generated board.rs from template"
 else
     echo "❌ Failed to generate board.rs from template"
@@ -110,7 +126,7 @@ else
 fi
 
 # Generate Cargo.toml from template
-if substitute_template "config/templates/Cargo.template.toml" "Cargo.toml"; then
+if substitute_template "Cargo.template.toml" "Cargo.toml"; then
     echo "✅ Generated Cargo.toml from template"
 else
     echo "❌ Failed to generate Cargo.toml from template"
@@ -118,7 +134,8 @@ else
 fi
 
 # Generate .cargo/config.toml from template
-if substitute_template "config/templates/config.template.toml" ".cargo/config.toml"; then
+mkdir -p .cargo
+if substitute_template ".cargo/config.template/config.template.toml" ".cargo/config.toml"; then
     echo "✅ Generated .cargo/config.toml from template"
 else
     echo "❌ Failed to generate .cargo/config.toml from template"
@@ -130,8 +147,8 @@ LAUNCH_TEMPLATE=".vscode/launch.template.json"
 LAUNCH_FILE=".vscode/launch.json"
 if [[ -f "$LAUNCH_TEMPLATE" ]]; then
     cp "$LAUNCH_TEMPLATE" "$LAUNCH_FILE"
-    # Replace the chip field using the template variable (robust to trailing commas/comments)
-    sed -i '' "s/\("chip"\): \"{{CHIP_NAME}}\".*/\1: \"$CHIP_NAME\",/" "$LAUNCH_FILE"
+    # Simple, portable sed replacement for chip field
+    sed -i '' "s/\"chip\": \"{{CHIP_NAME}}\".*/\"chip\": \"$CHIP_NAME\",/" "$LAUNCH_FILE"
     echo "✅ Updated $LAUNCH_FILE chip field to $CHIP_NAME"
 else
     echo "⚠️  $LAUNCH_TEMPLATE not found; skipping chip update."
