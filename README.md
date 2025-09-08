@@ -1,58 +1,27 @@
+
 # 🚀 Multi-MCU Embassy Framework - Embedded Rust Project
 
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![Embassy](https://im   └── 📂 boards/                # 📟 Board-specific pin configurations & interrupt handlers
-       ├── 📄 nucleo_f446re.rs       # Nucleo F446RE pins, interrupts & hardware init
-       └── 📄 [future_board_configs] # Additional board configurationshields.io#### 📋 **Template System** (`config/templates/`)
-- **Purpose**: MCU-specific configuration templates
-- **Components**: Cargo.toml and config.toml variants for each MCU
-- **Benefits**: Version-controlled, consistent configurations
-
-#### 💾 **Memory Layouts** (`config/memory/`)
-- **Purpose**: MCU-specific memory definitions for linker
-- **Format**: GNU LD linker scripts defining Flash/RAM regions
-- **Usage**: Copied to root `memory.x` by setup script
-
-#### 📟 **Board Configurations** (`board.rs`)
-- **Purpose**: Board-specific pin mappings, settings, and interrupt handlers
-- **Format**: Rust modules with const definitions and interrupt handlers
-- **Usage**: Copied to root `board.rs` by setup script
-- **Contents**: Pin assignments, GPIO settings, hardware initialization, MCU-specific interrupts-v0.4+-blue.svg)](https://embassy.dev/)
-[![STM32](https://img.shields.io/badge/STM32-Multi--Board-green.svg)](https://www.st.com/en/microcontrollers-microprocessors/stm32-32-bit-arm-cortex-mcus.html)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-yellow.svg)](LICENSE)
+A modern, async embedded Rust project demonstrating real-time system capabilities using the Embassy framework on multiple STM32 microcontrollers. Features **automatic MCU configuration management**, hardware abstraction layers, task management, and comprehensive peripheral control with **single-command board switching**.
 
 A modern, async embedded Rust project demonstrating real-time system capabilities using the Embassy framework on multiple STM32 microcontrollers. Features **automatic MCU configuration management**, hardware abstraction layers, task management, and comprehensive peripheral control with **single-command board switching**.
 
 ## 📋 Table of Contents
 
-- [🎯 Features](#-features)
-- [🔧 Hardware Requirements](#-hardware-requirements)
-- [⚡ MCU Configuration System](#-mcu-configuration-system)
-- [📁 Project Structure](#-project-structure)
-- [🛠️ Setup & Installation](#️-setup--installation)
-- [🚀 Building & Flashing](#-building--flashing)
-- [⚙️ Board Configuration](#️-board-configuration)
-- [🔄 Adding New MCUs](#-adding-new-mcus)
-- [🧪 Testing](#-testing)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
-
-## 🎯 Features
-
-- **Single-command board switching** and template-based configuration (`./setup.sh <board>`)
-- **Async/await multitasking** with Embassy's runtime
-- **Board-agnostic, modular code**: hardware abstraction, generic tasks, and easy MCU/board addition
-- **Automatic config management**: memory.x, board.rs, Cargo.toml, .cargo/config.toml
-- **RTT logging** and structured debug output via `defmt`
-- **Watchdog, RTC, GPIO, and timer utilities**
-- **Integration tests** and size-optimized release builds
+- [Hardware Requirements](#-hardware-requirements)
+- [MCU Configuration System](#-mcu-configuration-system)
+- [Project Structure](#-project-structure)
+- [Setup & Installation](#️-setup--installation)
+- [Building & Flashing](#-building--flashing)
+- [Board Configuration](#️-board-configuration)
+- [Testing](#-testing)
+- [License](#-license)
 
 ## 🔧 Hardware Requirements
 
 ### Supported Boards
 
 - **STM32 Nucleo-F446RE** (default, fully tested, USB-powered, built-in ST-LINK)
-- Easy expansion: STM32F4, F7, H7, G4 series (see [Adding New MCUs](#-adding-new-mcus))
+- Easy expansion: STM32F4, F7, H7, G4 series
 
 **Board Components:**
 
@@ -122,9 +91,7 @@ embassy_stm32_starter/
 │   ├── 📂 memory/                # 💾 MCU memory layout definitions
 │   │   ├── 📄 stm32f446re.x          # STM32F446RE memory map
 │   │   └── 📄 [future_mcu_layouts]   # Additional MCU memory files
-│   └── 📂 boards/                # 📟 Board-specific pin configurations
-│       ├── 📄 nucleo_f446re.rs       # Nucleo F446RE pin mappings
-│       └── 📄 [future_board_configs] # Additional board configurations
+│   # (Board-specific pin config is copied to board.rs by setup.sh)
 ├── 📂 src/
 │   ├── 📄 lib.rs                 # Library root & inline module declarations
 │   ├── 📂 hardware/              # Hardware Abstraction Layer (HAL)
@@ -241,30 +208,10 @@ The project supports easy switching between different MCU configurations:
 
 
 ### Understanding Board Files
-Each board configuration in `boards/` contains:
-
-```rust
-// Example: boards/nucleo_f446re.rs
-use embassy_stm32::gpio::{Level, Pull};
-
 pub struct BoardConfig;
-
-impl BoardConfig {
-    // LED configuration
-    pub const LED_PIN: &'static str = "PA5";
-    pub const LED_ACTIVE_LEVEL: Level = Level::High;
-    
-    // Button configuration  
-    pub const BUTTON_PIN: &'static str = "PC13";
-    pub const BUTTON_PULL: Pull = Pull::Down;
-    
-    // Board identification
-    pub const BOARD_NAME: &'static str = "STM32F446RE Nucleo";
-}
-```
-
 pub struct BoardConfig;
 target = "thumbv7em-none-eabihf"
+The active board configuration is always in `board.rs` (copied by `setup.sh`).
 
 ## 🧪 Testing
 
@@ -276,102 +223,6 @@ cargo test --test integration
 # Run specific test
 cargo test --test integration -- button_test
 ```
-
-### Unit Tests
-```bash
-# Run software-only unit tests
-cargo test --lib
-```
-
-### Continuous Integration
-The project includes CI-ready configurations for:
-- **Build verification** across multiple targets
-- **Code quality checks** (clippy, formatting)
-- **Documentation generation**
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### 1. **Probe Connection Failed**
-```
-Error: Probe was not found.
-```
-**Solution**: Check USB connection, install ST-LINK drivers, verify with `probe-rs list`
-
-#### 2. **Build Errors**
-```
-error: linking with `rust-lld` failed: exit status: 1
-```
-**Solution**: Ensure correct target: `rustup target add thumbv7em-none-eabihf`
-
-#### 3. **RTT Not Working**
-```
-No RTT data received
-```
-**Solution**: Verify debug build (`cargo build` not `cargo build --release`), check RTT buffer size
-
-#### 4. **Watchdog Reset Loop**
-**Solution**: Increase watchdog timeout or decrease main loop delay in `blinky.rs`
-
-### Debug Strategies
-1. **LED Patterns**: Use different blink rates to indicate system states
-2. **RTT Logging**: Add `info!()`, `warn!()`, `error!()` messages for debugging
-3. **Probe Debugging**: Use `probe-rs gdb` for step-through debugging
-4. **Logic Analyzer**: Monitor GPIO pins for timing verification
-
-## 🔄 Development Workflow
-
-### Recommended Tools
-- **VS Code** with rust-analyzer extension
-- **probe-rs VS Code extension** for integrated debugging
-- **RTT Viewer** for real-time log monitoring
-- **STM32CubeMX** for peripheral reference (optional)
-
-### Best Practices
-- Commit frequently, use meaningful messages
-- Run `cargo clippy` and `cargo fmt` before commits
-- Test on hardware regularly
-- Keep docs and code comments up to date
-- Profile with `cargo bloat` for size
-
-## 🤝 Contributing
-
-### Development Setup
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Configure for your development board: `./setup.sh nucleo`
-4. Make your changes following the existing code style
-5. Test on real hardware with your configuration
-6. Submit a pull request with clear description of changes
-
-### Code Style
-- Use `cargo fmt` for formatting
-- Follow Rust naming conventions
-- Add comprehensive documentation for public APIs
-- Include hardware testing for new features
-
-### Contribution Areas
-- 🎯 **Additional STM32 board support** - Add new MCU configurations
-- 🔧 **New peripheral drivers** - SPI, I2C, UART abstractions
-- 📚 **Documentation improvements** - Better examples and guides
-- 🧪 **Test coverage expansion** - More hardware testing scenarios
-- ⚡ **Performance optimizations** - Memory and timing improvements
-- 🛠️ **Setup script enhancements** - Better error handling, validation
-- 📋 **Template improvements** - More comprehensive MCU support
-
-## 📚 Additional Resources
-
-### Documentation
-- [Embassy Framework Documentation](https://embassy.dev/)
-- [STM32F446RE Reference Manual](https://www.st.com/resource/en/reference_manual/dm00135183-stm32f446xx-advanced-armbased-32bit-mcus-stmicroelectronics.pdf)
-- [Rust Embedded Book](https://doc.rust-lang.org/stable/embedded-book/)
-- [probe-rs Documentation](https://probe.rs/)
-
-### Community
-- [Rust Embedded Matrix Chat](https://matrix.to/#/#rust-embedded:matrix.org)
-- [Embassy Matrix Chat](https://matrix.to/#/#embassy-rs:matrix.org)
-- [STM32 Community Forum](https://community.st.com/s/)
 
 ## 📄 License
 
@@ -410,6 +261,5 @@ probe-rs list                  # Verify hardware connection
 # Development commands:
 cargo clippy                   # Code quality check
 cargo fmt                      # Format code
-cargo test --lib              # Run unit tests  
-cargo test --test integration # Run hardware tests
+cargo test --test integration  # Run hardware tests
 ```
