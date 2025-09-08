@@ -63,8 +63,8 @@ The setup script automatically updates **5 critical files**:
 | `board.template.rs` | Board config template | Used as the source for `board.rs` |
 | `Cargo.toml` | MCU dependencies | Embassy features, chip-specific crates (generated from `Cargo.template.toml`) |
 | `Cargo.template.toml` | Cargo config template | Used as the source for `Cargo.toml` |
-| `.cargo/config.toml` | Build configuration | Target, runner, debug settings (generated from `.cargo/config.template/config.template.toml`) |
-| `.cargo/config.template/config.template.toml` | Build config template | Used as the source for `.cargo/config.toml` |
+| `.cargo/config.toml` | Build configuration | Target, runner, debug settings (generated from `.cargo/config.template.toml`) |
+| `.cargo/config.template.toml` | Build config template | Used as the source for `.cargo/config.toml` |
 | `.vscode/launch.json` | VS Code debug config | `"chip": "..."` is set for the selected board (generated from `.vscode/launch.template.json`) |
 | `.vscode/launch.template.json` | VS Code debug config template | Used as the source for `launch.json`; contains `"chip": "{{CHIP_NAME}}"` |
 
@@ -72,10 +72,29 @@ The setup script automatically updates **5 critical files**:
 
 ### Configuration Architecture
 ```
-config/              # Configuration management
-├── templates/       # MCU-specific config templates (Cargo.toml, config.toml)
-├── memory/          # MCU memory layouts (e.g., stm32f446re.x)
-board.rs             # Board-specific pin config (copied by setup)
+embassy_stm32_starter/
+├── setup
+├── memory.x
+├── memory.template.x
+├── board.rs
+├── board.template.rs
+├── Cargo.toml
+├── Cargo.template.toml
+├── .cargo/
+│   ├── config.toml
+│   └── config.template.toml
+├── .vscode/
+│   ├── launch.json
+│   └── launch.template.json
+└── src/
+    ├── lib.rs
+    ├── hardware/
+    │   ├── gpio.rs
+    │   └── timers.rs
+    ├── common/
+    │   └── tasks.rs
+    └── bin/
+        └── blinky.rs
 ```
 
 
