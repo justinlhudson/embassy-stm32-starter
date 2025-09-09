@@ -25,23 +25,30 @@ impl BoardConfiguration for BoardConfig {
     
     /// Initialize all hardware for this board
     fn init_all_hardware(peripherals: embassy_stm32::Peripherals) -> (
-        Output<'static>, 
-        Input<'static>, 
-        embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>, 
-        embassy_stm32::rtc::Rtc
+        Output<'static>,
+        Input<'static>,
+        embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
+        embassy_stm32::rtc::Rtc,
+        embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>,
     ) {
         use crate::hardware::GpioDefaults;
         use embassy_stm32::rtc::{Rtc, RtcConfig};
         use embassy_stm32::wdg::IndependentWatchdog;
-        
+        use crate::hardware::serial;
+
         let led = Output::new(peripherals.PA5, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
         let button = Input::new(peripherals.PC13, GpioDefaults::BUTTON_PULL);
         let mut wdt = IndependentWatchdog::new(peripherals.IWDG, 1_000_000);
         let rtc = Rtc::new(peripherals.RTC, RtcConfig::default());
-        
+        let serial = serial::init(
+            peripherals.USART2,
+            peripherals.PA2,
+            peripherals.PA3,
+        );
+
         wdt.unleash();
-        
-        (led, button, wdt, rtc)
+
+        (led, button, wdt, rtc, serial)
     }
 }
 

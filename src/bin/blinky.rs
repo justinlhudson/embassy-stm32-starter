@@ -59,7 +59,10 @@ async fn main(spawner: Spawner) {
     info!("Peripherals initialized");
     
     // Initialize all hardware using board-specific configuration
-    let (led, button, mut wdt, rtc) = BoardConfig::init_all_hardware(peripherals);
+    let (led, button, mut wdt, rtc, mut serial) = BoardConfig::init_all_hardware(peripherals);
+
+    // Send a hello message over serial using blocking write
+    let _ = serial.write(b"Hello from Embassy USART2!\r\n");
 
     info!("Hardware setup complete");
     

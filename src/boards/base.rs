@@ -41,13 +41,15 @@ pub trait BoardConfiguration {
     /// - Button input pin  
     /// - Independent watchdog timer
     /// - Real-time clock
+    /// - Async serial UART
     fn init_all_hardware(
         peripherals: embassy_stm32::Peripherals
     ) -> (
         Output<'static>,
         Input<'static>,
         IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
-        Rtc
+        Rtc,
+        embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>
     );
     
     /// Get board information as a formatted string

@@ -13,8 +13,10 @@ pub use defmt::*; // re-export all defmt macros for convenience
 pub mod hardware {
     pub mod gpio;
     pub mod timers;
+    pub mod serial;
     pub use gpio::*;
     pub use timers::*;
+    pub use serial::*;
 }
 
 // Common/shared functionality modules  
