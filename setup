@@ -41,7 +41,7 @@ fi
 # Configure based on board selection
 case "$BOARD" in
     "nucleo"|"nucleo-f446re")
-        BOARD_CONFIG="src/boards/nucleo_f446re.rs"
+    BOARD_CONFIG="src/board/nucleo_f446re.rs"
         BOARD_DESCRIPTION="STM32F446RE Nucleo board"
         BOARD_NAME="STM32F446RE Nucleo board"
         MCU_NAME="STM32F446RE"
@@ -51,7 +51,7 @@ case "$BOARD" in
         STM32_EMBASSY_FEATURE="stm32f446re"
         ;;
     "nucleo144"|"nucleo-144"|"nucleo144-f413zh")
-        BOARD_CONFIG="src/boards/nucleo144_f413zh.rs"
+    BOARD_CONFIG="src/board/nucleo144_f413zh.rs"
         BOARD_DESCRIPTION="STM32F413ZH Nucleo-144 board"
         BOARD_NAME="STM32F413ZH Nucleo-144 board"
         MCU_NAME="STM32F413ZH"

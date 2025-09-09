@@ -63,6 +63,7 @@ embassy_stm32_starter/
 │   └── 📄 config.toml            # 🔄 Active build settings (managed by setup)
 ├── 📂 src/
 │   ├── 📄 lib.rs                 # Library root & inline module declarations
+│   ├── 📂 board/                 # Board configuration modules (Nucleo, Nucleo144, etc)
 │   ├── 📂 hardware/              # Hardware Abstraction Layer (HAL)
 │   │   ├── 📄 gpio.rs            # GPIO utilities & generic board configs
 │   │   └── 📄 timers.rs          # Timing constants & delay functions
