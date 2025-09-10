@@ -10,33 +10,33 @@
 //! Pin configurations are handled by the board.rs file (copied from boards/* by setup.sh)
 
 use embassy_executor::Spawner;
-use embassy_stm32::gpio::{Input, Output};
-use embassy_stm32::rtc::Rtc;
+// use embassy_stm32::gpio::{Input, Output};
+// use embassy_stm32::rtc::Rtc;
 use embassy_stm32::Config;
 use embassy_time::Timer;
 use embassy_stm32_starter::*;
-use embassy_stm32_starter::common::tasks::*;
-use embassy_stm32_starter::hardware::TimingUtils;
+// use embassy_stm32_starter::common::tasks::*;
+// use embassy_stm32_starter::hardware::TimingUtils;
 
 // Select board configuration from the board.rs file (copied by setup.sh)
-use embassy_stm32_starter::board::{BoardConfig, BoardConfiguration};
+use embassy_stm32_starter::board::BoardConfig;
 
-/// Spawn common system tasks for the blinky application
-fn spawn_system_tasks(
-    spawner: &Spawner,
-    led: Output<'static>,
-    button: Input<'static>,
-    rtc: Rtc,
-) -> Result<(), embassy_executor::SpawnError> {
-    spawner.spawn(led_blink_custom(led, TimingUtils::FAST_BLINK_MS))?;
-    spawner.spawn(button_monitor(button))?;
-    spawner.spawn(heartbeat_task())?;
-    spawner.spawn(rtc_clock_task(rtc))?;
-    Ok(())
-}
+// /// Spawn common system tasks for the blinky application
+// fn spawn_system_tasks(
+//     spawner: &Spawner,
+//     led: Output<'static>,
+//     button: Input<'static>,
+//     rtc: Rtc,
+// ) -> Result<(), embassy_executor::SpawnError> {
+//     spawner.spawn(led_blink_custom(led, TimingUtils::FAST_BLINK_MS))?;
+//     spawner.spawn(button_monitor(button))?;
+//     spawner.spawn(heartbeat_task())?;
+//     spawner.spawn(rtc_clock_task(rtc))?;
+//     Ok(())
+// }
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(_spawner: Spawner) {
     info!("Embassy blinky starting...");
     
     // Log board configuration info
@@ -54,30 +54,29 @@ async fn main(spawner: Spawner) {
     
     // Initialize hardware
     let config = Config::default();
-    let peripherals = embassy_stm32::init(config);
+    let _peripherals = embassy_stm32::init(config);
     
     info!("Peripherals initialized");
     
-    // Initialize all hardware using board-specific configuration
-    let (led, button, mut wdt, rtc, mut serial) = BoardConfig::init_all_hardware(peripherals);
+    // TODO: Initialize all hardware using board-specific configuration
+    // let (led, button, mut wdt, rtc, mut serial) = BoardConfig::init_all_hardware(peripherals);
 
-    // Send a hello message over serial using blocking write
-    let _ = serial.write(b"Hello from Embassy USART2!\r\n");
+    // TODO: Send a hello message over serial using blocking write
+    // let _ = serial.write(b"Hello from Embassy USART2!\r\n");
 
-    info!("Hardware setup complete");
+    info!("Hardware setup complete - TODO: implement hardware initialization");
     
     info!("Spawning system tasks...");
     
-    // Spawn all system tasks
-    spawn_system_tasks(&spawner, led, button, rtc)
-        .expect("Failed to spawn system tasks");
+    // TODO: Spawn all system tasks when hardware is available
+    // spawn_system_tasks(&spawner, led, button, rtc)
+    //     .expect("Failed to spawn system tasks");
 
-    info!("All tasks spawned, starting watchdog management");
+    info!("All tasks spawned, starting main loop");
     
-    // Main task manages the watchdog
+    // Main task loop (simplified until hardware init is implemented)
     loop {
-        info!("Main loop - petting watchdog");
-        wdt.pet();
-        Timer::after_millis(250).await; // Pet every 250ms (25% of 1000ms timeout)
+        info!("Main loop - waiting (TODO: implement watchdog)");
+        Timer::after_millis(1000).await;
     }
 }

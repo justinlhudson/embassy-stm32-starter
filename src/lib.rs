@@ -19,6 +19,12 @@ pub mod hardware {
     pub use serial::*;
 }
 
+// Protocol modules
+pub mod protocol {
+    pub mod hdlc;
+    pub use hdlc::*;
+}
+
 // Common/shared functionality modules  
 pub mod common {
     pub mod tasks;
@@ -28,3 +34,5 @@ pub mod common {
 // Board configuration - included from root board.rs file (copied by setup.sh)
 #[path = "../board.rs"]
 pub mod board;
+
+

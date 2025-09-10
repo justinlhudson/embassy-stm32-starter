@@ -63,8 +63,16 @@ pub fn hdlc_deframe(
                 escape = true;
             } else if b == HDLC_FLAG {
                 if out.len() >= 2 {
-                    // Remove processed bytes from buf
-                    buf.drain(..=i);
+                    // Remove processed bytes from buf (shift remaining bytes)
+                    if i + 1 < buf.len() {
+                        let remaining = buf.len() - (i + 1);
+                        for j in 0..remaining {
+                            buf[j] = buf[i + 1 + j];
+                        }
+                        buf.truncate(remaining);
+                    } else {
+                        buf.clear();
+                    }
                     // Split payload and checksum
                     let payload_len = out.len() - 2;
                     let (payload, xsum_bytes) = out.split_at(payload_len);
