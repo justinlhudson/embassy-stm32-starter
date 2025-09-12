@@ -90,14 +90,40 @@ async fn main(_spawner: Spawner) {
             }
 
             // Example: also drain decoded HDLC frames if present
-            if let Some(frame) = embassy_stm32_starter::service::comms::try_read_decoded_hdlc() {
+            if let Some(frame) = embassy_stm32_starter::service::comm::try_read_decoded_hdlc() {
                   info!("HDLC frame ({} bytes)", frame.len());
+            }
+
+            // Example: drain parsed Comms messages if present
+            if let Some(msg) = embassy_stm32_starter::service::comm::try_read_comms_msg() {
+                  info!(
+                        "Comms msg: command={}, id=0x{:08x}, {}/{} bytes",
+                        msg.command,
+                        msg.id,
+                        msg.payload.len(),
+                        embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
+                  );
             }
 
                   // Periodically send a small HDLC-framed payload
                   {
+                        // Send a Comms-framed payload over HDLC
+                        static mut MSG_ID_COUNTER: u32 = 0;
+                        // Safety: only accessed in this single-threaded async context
+                        let msg_id = unsafe {
+                              let id = MSG_ID_COUNTER;
+                              MSG_ID_COUNTER = MSG_ID_COUNTER.wrapping_add(1);
+                              id
+                        };
                         let mut tx_ref = &mut uart_tx;
-                        embassy_stm32_starter::service::comms::write_hdlc(&mut tx_ref, b"ping");
+                        embassy_stm32_starter::service::comm::write_comms_frame(
+                              &mut tx_ref,
+                              1,          // command
+                              msg_id,     // id
+                              1,          // fragments
+                              0,          // fragment index
+                              b"ping",
+                        );
                   }
 
             info!("Main loop - waiting (TODO: implement watchdog)");

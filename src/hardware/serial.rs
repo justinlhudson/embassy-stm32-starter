@@ -145,6 +145,6 @@ where
     let (tx, rx) = uart.split();
     let receiver = create_serial_receiver(rx);
     let _ = spawner.spawn(serial_rx_task_dma(receiver));
-    let _ = spawner.spawn(crate::service::comms::serial_hdlc_consumer_task());
+    let _ = spawner.spawn(crate::service::comm::serial_hdlc_consumer_task());
     tx
 }

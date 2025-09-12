@@ -21,8 +21,8 @@ pub mod hardware {
 
 // Services layer
 pub mod service {
-    pub mod comms;
-    pub use comms::*;
+    pub mod comm;
+    pub use comm::*;
 }
 
 // Protocol modules
