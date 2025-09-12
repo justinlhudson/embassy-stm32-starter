@@ -1,36 +1,5 @@
-/*!
-# Serial Communication Module with DMA and Idle Interrupt
+/*! Serial module: DMA RX with idle detection. */
 
-This module provides DMA-based serial communication with idle interrupt detection
-for efficient data reception on STM32F446RE using Embassy framework.
-
-## Key Features
-
-- **DMA-based reception**: Uses Embassy's built-in DMA support for efficient data transfer
-- **Idle interrupt detection**: Automatically detects when transmission ends using UART idle interrupt
-- **Async/await support**: Fully async using Embassy's executor
-- **HDLC protocol support**: Integrated with HDLC framing protocol
-
-## Usage
-
-1. Create a UART instance in your main application
-2. Split it into TX/RX parts  
-3. Pass the RX part to `create_serial_receiver`
-4. Spawn the `serial_rx_task_dma` task
-5. Use `read()` and `read_decoded_hdlc()` functions to get data
-
-## Example
-
-```rust
-// In your main function after embassy_stm32::init():
-let uart = Uart::new(p.USART2, p.PA3, p.PA2, p.DMA1_CH6, p.DMA1_CH5, Irqs, config)?;
-let (uart_tx, uart_rx) = uart.split();
-let serial_rx = create_serial_receiver(uart_rx);
-spawner.spawn(serial_rx_task_dma(serial_rx))?;
-```
-*/
-
-use crate::protocol::hdlc;
 use embassy_executor::Spawner;
 use embassy_stm32::{
     usart::{self, Uart, UartRx, UartTx, Config as UartConfig, Instance, RxPin, TxPin, TxDma, RxDma},
@@ -41,7 +10,7 @@ use embassy_stm32::{
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{Timer, Duration};
-use heapless::{String, Vec};
+use heapless::Vec;
 
 // Bind USART2 interrupt handler for async operation  
 bind_interrupts!(pub struct Irqs {
@@ -108,13 +77,11 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
         match serial_rx.read_until_idle().await {
             Ok(data) => {
                 if !data.is_empty() {
-                    // Convert to string and queue
-                    if let Ok(s) = core::str::from_utf8(data) {
-                        let mut string: String<64> = String::new();
-                        if string.push_str(s).is_ok() {
-                            let _ = SERIAL_RX_QUEUE.try_send(string);
-                        }
-                    }
+                    // Copy bytes into a bounded buffer and queue
+                    let mut bytes: Vec<u8, 128> = Vec::new();
+                    let take = core::cmp::min(bytes.capacity(), data.len());
+                    bytes.extend_from_slice(&data[..take]).ok();
+                    let _ = SERIAL_RX_QUEUE.try_send(bytes);
                 }
                 serial_rx.clear_buffer();
             }
@@ -127,152 +94,29 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
     }
 }
 
-// Global queues for serial communication
-static SERIAL_RX_QUEUE: Channel<CriticalSectionRawMutex, String<64>, 8> = Channel::new();
-// Queue for decoded HDLC frames  
-static DECODED_HDLC_QUEUE: Channel<CriticalSectionRawMutex, Vec<u8, 128>, 8> = Channel::new();
-
-/// Encode a payload as HDLC and write to serial (blocking)
-pub fn write_hdlc<'a, W: embedded_io::Write>(serial: &mut W, payload: &[u8]) {
-    let mut framed = heapless::Vec::<u8, 128>::new();
-    hdlc::hdlc_frame(payload, &mut framed);
-    write(serial, &framed);
-}
-
-/// Try to decode an HDLC frame from a buffer of received serial data
-pub fn try_decode_hdlc(buf: &mut heapless::Vec<u8, 128>, out: &mut heapless::Vec<u8, 128>) -> bool {
-    hdlc::hdlc_deframe(buf, out).is_some()
-}
+// Global queue for raw serial bytes
+static SERIAL_RX_QUEUE: Channel<CriticalSectionRawMutex, Vec<u8, 128>, 8> = Channel::new();
 /// Blocking write function for serial output
-pub fn write<'a, W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
-
+pub fn write<W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
     let _ = serial.write_all(data);
     let _ = serial.flush();
 }
 
-/// Try to read a string from the serial RX queue (non-blocking)
-pub fn read() -> Option<String<64>> {
+/// Try to read raw serial bytes (non-blocking)
+pub fn read() -> Option<Vec<u8, 128>> {
     SERIAL_RX_QUEUE.try_receive().ok()
 }
 
-/// Example async task: read HDLC frames from serial, queue decoded payloads
-#[embassy_executor::task]
-pub async fn serial_hdlc_consumer_task() {
-    use heapless::Vec;
-    let mut rx_buf: Vec<u8, 128> = Vec::new();
-    let mut decoded: Vec<u8, 128> = Vec::new();
-    loop {
-        // Wait for a new message from the serial RX queue
-        let msg = SERIAL_RX_QUEUE.receive().await;
-        // Append to buffer
-        rx_buf.extend_from_slice(msg.as_bytes()).ok();
-        // Try to decode HDLC frame(s)
-        while try_decode_hdlc(&mut rx_buf, &mut decoded) {
-            // decoded now contains the deframed payload
-            // Queue the decoded payload for later consumption
-            let mut payload = Vec::new();
-            payload.extend_from_slice(&decoded).ok();
-            let _ = DECODED_HDLC_QUEUE.try_send(payload);
-        }
-    }
+/// Await raw serial bytes from the RX queue
+pub async fn recv_raw() -> Vec<u8, 128> {
+    SERIAL_RX_QUEUE.receive().await
 }
 
-/// Try to read a decoded HDLC payload (non-blocking)
-pub fn read_decoded_hdlc() -> Option<Vec<u8, 128>> {
-    DECODED_HDLC_QUEUE.try_receive().ok()
-}
 
-/// Async (blocking) read of a decoded HDLC payload
-pub async fn read_decoded_hdlc_async() -> Vec<u8, 128> {
-    DECODED_HDLC_QUEUE.receive().await
-}
+/// Get the interrupt handler type aliases for export to board configs
+pub use Irqs as Serial2Irqs;
+pub use IrqsUsart3 as Serial3Irqs;
 
-/// Get the interrupt handler type for USART2 (for export to board configs)
-pub type SerialIrqs = Irqs;
-pub type Serial3Irqs = IrqsUsart3;
-
-/// Example initialization function - this shows how to use the serial module
-/// You would call this from your main application after embassy_stm32::init()
-/// 
-/// ```rust,no_run
-/// # use embassy_stm32::{Config as UartConfig, usart::Uart};
-/// # let p = embassy_stm32::init(Default::default());
-/// let mut uart_config = UartConfig::default();
-/// uart_config.baudrate = 115_200;
-/// 
-/// let uart = Uart::new(
-///     p.USART2, 
-///     p.PA3,    // RX pin
-///     p.PA2,    // TX pin  
-///     p.DMA1_CH6, // RX DMA channel
-///     p.DMA1_CH5, // TX DMA channel
-///     SerialIrqs, 
-///     uart_config
-/// ).unwrap();
-/// 
-/// let (uart_tx, uart_rx) = uart.split();
-/// let serial_receiver = create_serial_receiver(uart_rx);
-/// 
-/// // Spawn the DMA receive task
-/// spawner.spawn(serial_rx_task_dma(serial_receiver)).unwrap();
-/// 
-/// // Spawn the HDLC decoder task
-/// spawner.spawn(serial_hdlc_consumer_task()).unwrap();
-/// ```
-pub fn _example_usage_documentation_only() {
-    // This function exists only for documentation purposes
-    // It will be optimized away in release builds
-    unimplemented!("This is documentation only")
-}
-// Serial (USART2) abstraction for Nucleo-F446RE
-// TODO: Implement proper UART initialization
-
-
-// Bind USART2 interrupt for async mode
-
-
-// SAFETY: This macro is required by Embassy for async UART operation. Must be at module root.
-// TODO: Fix UART initialization for Embassy v0.4.0
-// embassy_stm32::bind_interrupts!(struct Irqs {
-//     USART2 => usart::InterruptHandler<peripherals::USART2>;
-// });
-
-// pub fn init(
-//     usart2: peripherals::USART2,
-//     tx: peripherals::PA2, 
-//     rx: peripherals::PA3,
-// ) -> Uart<'static, Async> {
-//     let mut config = UartConfig::default();
-//     config.baudrate = 115_200;
-//     // Embassy expects: new(peri, rx_pin, tx_pin, cts_pin, rts_pin, irqs, config)
-//     Uart::new(usart2, rx, tx, embassy_stm32::gpio::NoPin, embassy_stm32::gpio::NoPin, Irqs, config)
-// }
-
-/// Board-agnostic helper to initialize USART2 with DMA and spawn serial tasks.
-/// For Nucleo-F446RE: PA2=TX, PA3=RX; TX DMA=DMA1_CH6, RX DMA=DMA1_CH5.
-/// Returns the TX half for writes.
-pub fn init_usart2(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
-    let mut cfg = UartConfig::default();
-    cfg.baudrate = 115_200;
-
-    // Order: peri, rx, tx, Irqs, tx_dma, rx_dma, config
-    let uart = Uart::new(
-        p.USART2,
-        p.PA3,      // RX
-        p.PA2,      // TX
-        Irqs,
-        p.DMA1_CH6, // TX DMA
-        p.DMA1_CH5, // RX DMA
-        cfg,
-    )
-    .unwrap();
-
-    let (tx, rx) = uart.split();
-    let receiver = create_serial_receiver(rx);
-    let _ = spawner.spawn(serial_rx_task_dma(receiver));
-    let _ = spawner.spawn(serial_hdlc_consumer_task());
-    tx
-}
 
 /// Generic serial initializer: takes USART peri, RX/TX pins, Irqs binding, TX/RX DMA, sets 115200 and spawns tasks.
 pub fn init_serial<T, RX, TX, TXDMA, RXDMA>(
@@ -301,6 +145,6 @@ where
     let (tx, rx) = uart.split();
     let receiver = create_serial_receiver(rx);
     let _ = spawner.spawn(serial_rx_task_dma(receiver));
-    let _ = spawner.spawn(serial_hdlc_consumer_task());
+    let _ = spawner.spawn(crate::service::comms::serial_hdlc_consumer_task());
     tx
 }

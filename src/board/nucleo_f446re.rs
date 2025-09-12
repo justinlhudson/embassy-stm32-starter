@@ -64,7 +64,7 @@ impl BoardConfig {
             p.USART2,
             p.PA3,          // RX
             p.PA2,          // TX
-            serial::Irqs,   // USART2 irqs
+            serial::Serial2Irqs,   // USART2 irqs
             p.DMA1_CH6,     // TX DMA
             p.DMA1_CH5,     // RX DMA
         );
@@ -74,7 +74,15 @@ impl BoardConfig {
 
     /// Initialize USART2 serial for this board (PA2=TX, PA3=RX), spawn RX/HDLC tasks, and return TX half
     pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
-    serial::init_usart2(spawner, p)
+        serial::init_serial(
+            spawner,
+            p.USART2,
+            p.PA3,          // RX
+            p.PA2,          // TX
+            serial::Serial2Irqs,   // USART2 irqs
+            p.DMA1_CH6,     // TX DMA
+            p.DMA1_CH5,     // RX DMA
+        )
     }
 }
 

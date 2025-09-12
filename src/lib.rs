@@ -19,6 +19,12 @@ pub mod hardware {
     pub use serial::*;
 }
 
+// Services layer
+pub mod service {
+    pub mod comms;
+    pub use comms::*;
+}
+
 // Protocol modules
 pub mod protocol {
     pub mod hdlc;

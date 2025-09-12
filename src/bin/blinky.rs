@@ -80,24 +80,24 @@ async fn main(_spawner: Spawner) {
     
             // Main task loop: periodically echo any received lines, send a sample HDLC frame, and tick
     loop {
-            // Non-blocking read from serial queue
+            // Non-blocking read from serial queue (raw bytes)
             if let Some(msg) = embassy_stm32_starter::hardware::serial::read() {
-                  info!("UART RX: {}", msg.as_str());
+                  info!("UART RX ({} bytes)", msg.len());
                   // Echo back
-                  let _ = uart_tx.write_all(msg.as_bytes());
+                  let _ = uart_tx.write_all(&msg);
                   let _ = uart_tx.write_all(b"\r\n");
                   let _ = uart_tx.flush();
             }
 
             // Example: also drain decoded HDLC frames if present
-            if let Some(frame) = embassy_stm32_starter::hardware::serial::read_decoded_hdlc() {
+            if let Some(frame) = embassy_stm32_starter::service::comms::try_read_decoded_hdlc() {
                   info!("HDLC frame ({} bytes)", frame.len());
             }
 
                   // Periodically send a small HDLC-framed payload
                   {
                         let mut tx_ref = &mut uart_tx;
-                        embassy_stm32_starter::hardware::serial::write_hdlc(&mut tx_ref, b"ping");
+                        embassy_stm32_starter::service::comms::write_hdlc(&mut tx_ref, b"ping");
                   }
 
             info!("Main loop - waiting (TODO: implement watchdog)");
