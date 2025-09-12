@@ -14,9 +14,16 @@
 // - USART2 TX: PA2
 // - USART2 RX: PA3
 
-// use embassy_stm32::gpio::{Input, Output};
+use embassy_stm32::gpio::{Input, Output};
 // use embassy_stm32::peripherals;
 use super::{BoardConfiguration, InterruptHandlers};
+use embassy_executor::Spawner;
+use embassy_stm32::mode::Async;
+use embassy_stm32::usart::UartTx;
+use crate::hardware::serial;
+use embassy_stm32::rtc::{Rtc, RtcConfig};
+use embassy_stm32::wdg::IndependentWatchdog;
+use crate::hardware::GpioDefaults;
 
 pub struct BoardConfig;
 
@@ -31,10 +38,44 @@ impl BoardConfig {
     pub const BUTTON_PIN_NAME: &'static str = "PC13";
     pub const BUTTON_DESCRIPTION: &'static str = "Blue User Button (B1)";
     
-    // TODO: Implement init_all_hardware method
-    // pub fn init_all_hardware(peripherals: embassy_stm32::Peripherals) -> (...) {
-    //     // Return (led, button, watchdog, rtc, serial) 
-    // }
+    /// Initialize LED, button, watchdog, RTC, and serial for this board.
+    pub fn init_all_hardware(
+        spawner: Spawner,
+        p: embassy_stm32::Peripherals,
+    ) -> (
+        Output<'static>,
+        Input<'static>,
+        IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
+        Rtc,
+        UartTx<'static, Async>,
+    ) {
+        // GPIO
+        let led = Output::new(p.PA5, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
+        let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
+
+        // Watchdog and RTC
+        let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
+        let rtc = Rtc::new(p.RTC, RtcConfig::default());
+        wdt.unleash();
+
+        // Serial (USART2 on PA2/PA3)
+        let comms = serial::init_serial(
+            spawner,
+            p.USART2,
+            p.PA3,          // RX
+            p.PA2,          // TX
+            serial::Irqs,   // USART2 irqs
+            p.DMA1_CH6,     // TX DMA
+            p.DMA1_CH5,     // RX DMA
+        );
+
+        (led, button, wdt, rtc, comms)
+    }
+
+    /// Initialize USART2 serial for this board (PA2=TX, PA3=RX), spawn RX/HDLC tasks, and return TX half
+    pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
+    serial::init_usart2(spawner, p)
+    }
 }
 
 impl BoardConfiguration for BoardConfig {

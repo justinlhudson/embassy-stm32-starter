@@ -18,52 +18,87 @@
 // Note: This board has 3 user LEDs, we'll use LD1 (Green) as the primary LED
 
 use embassy_stm32::gpio::{Input, Output};
+use embassy_executor::Spawner;
+use embassy_stm32::mode::Async;
+use embassy_stm32::usart::UartTx;
+use embassy_stm32::rtc::{Rtc, RtcConfig};
+use embassy_stm32::wdg::IndependentWatchdog;
+use crate::hardware::serial;
+use crate::hardware::GpioDefaults;
 use super::{BoardConfiguration, InterruptHandlers};
 
 pub struct BoardConfig;
 
+// Implement the minimal trait per base.rs
 impl BoardConfiguration for BoardConfig {
-	// Board identification
-	const BOARD_NAME: &'static str = "STM32 Nucleo-144 F413ZH";
-	const MCU_NAME: &'static str = "STM32F413ZH";
-    
-	// Memory configuration
-	const FLASH_SIZE_KB: u32 = 1536;   // 1.5 MB Flash
-	const RAM_SIZE_KB: u32 = 320;      // 320 KB SRAM total (256KB + 64KB)
-    
-	// GPIO Pin assignments
-	const LED_PIN_NAME: &'static str = "PB0";   // LD1 - Green LED
-	const BUTTON_PIN_NAME: &'static str = "PC13"; // B1 - Blue tactile button
-    
-	// Pin descriptions
-	const LED_DESCRIPTION: &'static str = "Built-in LED LD1 (Green)";
-	const BUTTON_DESCRIPTION: &'static str = "Built-in button B1 (Blue)";
-    
-	/// Initialize all hardware for this board
-	fn init_all_hardware(peripherals: embassy_stm32::Peripherals) -> (
-		Output<'static>, 
-		Input<'static>, 
-		embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>, 
-		embassy_stm32::rtc::Rtc
-	) {
-		use crate::hardware::GpioDefaults;
-		use embassy_stm32::rtc::{Rtc, RtcConfig};
-		use embassy_stm32::wdg::IndependentWatchdog;
-        
-		let led = Output::new(peripherals.PB0, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
-		let button = Input::new(peripherals.PC13, GpioDefaults::BUTTON_PULL);
-		let mut wdt = IndependentWatchdog::new(peripherals.IWDG, 1_000_000);
-		let rtc = Rtc::new(peripherals.RTC, RtcConfig::default());
-        
-		wdt.unleash();
-        
-		(led, button, wdt, rtc)
+	fn board_name() -> &'static str {
+		"STM32 Nucleo-144 F413ZH"
 	}
 }
 
 impl InterruptHandlers for BoardConfig {
-	fn register_interrupt_handlers() {
+	fn setup() {
 		// All STM32F413ZH-specific interrupt handlers are defined below
+	}
+}
+
+impl BoardConfig {
+	// Board constants (mirroring F446RE style)
+	pub const MCU_NAME: &'static str = "STM32F413ZH";
+	pub const FLASH_SIZE_KB: u32 = 1536;   // 1.5 MB Flash
+	pub const RAM_SIZE_KB: u32 = 320;      // 320 KB SRAM total (256KB + 64KB)
+	pub const LED_PIN_NAME: &'static str = "PB0";   // LD1 - Green LED
+	pub const LED_DESCRIPTION: &'static str = "Built-in LED LD1 (Green)";
+	pub const BUTTON_PIN_NAME: &'static str = "PC13"; // B1 - Blue tactile button
+	pub const BUTTON_DESCRIPTION: &'static str = "Built-in button B1 (Blue)";
+
+	/// Initialize USART3 serial for this board (PD9=TX, PD8=RX), spawn RX/HDLC tasks, and return TX half
+	pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
+		// On STM32F413ZH Nucleo-144, default VCP often maps to USART3 (PD8=RX, PD9=TX)
+		// DMA mapping (common on F4): TX = DMA1_CH3, RX = DMA1_CH1 (adjust if needed per actual board schematic)
+		serial::init_serial(
+			spawner,
+			p.USART3,
+			p.PD8,  // RX
+			p.PD9,  // TX
+			serial::Serial3Irqs,
+			p.DMA1_CH3, // TX DMA for USART3
+			p.DMA1_CH1, // RX DMA for USART3
+		)
+	}
+
+	/// Initialize LED, button, watchdog, RTC, and serial for this board.
+	pub fn init_all_hardware(
+		spawner: Spawner,
+		p: embassy_stm32::Peripherals,
+	) -> (
+		Output<'static>,
+		Input<'static>,
+		IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
+		Rtc,
+		UartTx<'static, Async>,
+	) {
+		// GPIO
+		let led = Output::new(p.PB0, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
+		let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
+
+		// Watchdog and RTC
+		let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
+		let rtc = Rtc::new(p.RTC, RtcConfig::default());
+		wdt.unleash();
+
+		// Serial (USART3 on PD9/PD8)
+		let comms = serial::init_serial(
+			spawner,
+			p.USART3,
+			p.PD8,         // RX
+			p.PD9,         // TX
+			serial::Serial3Irqs,
+			p.DMA1_CH3,    // TX DMA for USART3
+			p.DMA1_CH1,    // RX DMA for USART3
+		);
+
+		(led, button, wdt, rtc, comms)
 	}
 }
 

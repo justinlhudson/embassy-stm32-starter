@@ -13,9 +13,10 @@ use embassy_executor::Spawner;
 // use embassy_stm32::gpio::{Input, Output};
 // use embassy_stm32::rtc::Rtc;
 use embassy_stm32::Config;
+// Serial is initialized through BoardConfig::init_serial
 use embassy_time::Timer;
 use embassy_stm32_starter::*;
-// use embassy_stm32_starter::common::tasks::*;
+use embassy_stm32_starter::common::tasks::*;
 // use embassy_stm32_starter::hardware::TimingUtils;
 
 // Select board configuration from the board.rs file (copied by setup.sh)
@@ -53,30 +54,53 @@ async fn main(_spawner: Spawner) {
           BoardConfig::BUTTON_DESCRIPTION);
     
     // Initialize hardware
-    let config = Config::default();
-    let _peripherals = embassy_stm32::init(config);
+            let config = Config::default();
+            let p = embassy_stm32::init(config);
     
-    info!("Peripherals initialized");
+      info!("Peripherals initialized");
     
-    // TODO: Initialize all hardware using board-specific configuration
-    // let (led, button, mut wdt, rtc, mut serial) = BoardConfig::init_all_hardware(peripherals);
+                  // Initialize all hardware via board config (LED, button, WDT, RTC, serial)
+                  let (led, button, _wdt, rtc, mut uart_tx) = BoardConfig::init_all_hardware(_spawner, p);
 
-    // TODO: Send a hello message over serial using blocking write
-    // let _ = serial.write(b"Hello from Embassy USART2!\r\n");
+      // Send a hello message over serial
+      use embedded_io::Write as _;
+      let _ = uart_tx.write_all(b"Hello from Embassy USART2!\r\n");
+      let _ = uart_tx.flush();
 
-    info!("Hardware setup complete - TODO: implement hardware initialization");
+            info!("Hardware setup complete; serial RX and HDLC tasks running");
     
     info!("Spawning system tasks...");
     
-    // TODO: Spawn all system tasks when hardware is available
-    // spawn_system_tasks(&spawner, led, button, rtc)
-    //     .expect("Failed to spawn system tasks");
+            // Spawn system tasks
+            _spawner.spawn(led_blink_custom(led, hardware::timers::TimingUtils::FAST_BLINK_MS)).ok();
+            _spawner.spawn(button_monitor(button)).ok();
+            _spawner.spawn(rtc_clock_task(rtc)).ok();
 
     info!("All tasks spawned, starting main loop");
     
-    // Main task loop (simplified until hardware init is implemented)
+            // Main task loop: periodically echo any received lines, send a sample HDLC frame, and tick
     loop {
-        info!("Main loop - waiting (TODO: implement watchdog)");
+            // Non-blocking read from serial queue
+            if let Some(msg) = embassy_stm32_starter::hardware::serial::read() {
+                  info!("UART RX: {}", msg.as_str());
+                  // Echo back
+                  let _ = uart_tx.write_all(msg.as_bytes());
+                  let _ = uart_tx.write_all(b"\r\n");
+                  let _ = uart_tx.flush();
+            }
+
+            // Example: also drain decoded HDLC frames if present
+            if let Some(frame) = embassy_stm32_starter::hardware::serial::read_decoded_hdlc() {
+                  info!("HDLC frame ({} bytes)", frame.len());
+            }
+
+                  // Periodically send a small HDLC-framed payload
+                  {
+                        let mut tx_ref = &mut uart_tx;
+                        embassy_stm32_starter::hardware::serial::write_hdlc(&mut tx_ref, b"ping");
+                  }
+
+            info!("Main loop - waiting (TODO: implement watchdog)");
         Timer::after_millis(1000).await;
     }
 }
