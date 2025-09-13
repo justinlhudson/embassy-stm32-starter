@@ -8,10 +8,11 @@ use crate::hardware::serial;
 use crate::protocol::hdlc;
 
 // Byte vector aliases used throughout this module
-pub type ByteVec = Vec<u8, 128>;
-pub type FramedBuf = Vec<u8, 128>;
+// Allow room for larger inbound/outbound frames (escaping can ~double size)
+pub type ByteVec = Vec<u8, 300>;
+pub type FramedBuf = Vec<u8, 300>;
 pub type CommsPayload = Vec<u8, COMMS_MAX_PAYLOAD>;
-pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=11 now
+pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=9 now
 
 /// Command identifiers for Comms messages.
 #[repr(u16)]
@@ -45,10 +46,10 @@ impl core::convert::TryFrom<u16> for Command {
 // - id:           u8
 // - fragments:    u16 (total fragments)
 // - fragment:     u16 (0-based index)
-// - length:       u8  (payload length in bytes)
+// - length:       u16  (payload length in bytes)
 // - payload:      [u8; length]
 
-pub const COMMS_HEADER_LEN: usize = 8;
+pub const COMMS_HEADER_LEN: usize = 9;
 pub const COMMS_MAX_PAYLOAD: usize = 128;
 
 #[derive(Clone, Debug)]
@@ -57,7 +58,7 @@ pub struct Message {
   pub id: u8,         // todo: future use
   pub fragments: u16, // todo: future use
   pub fragment: u16,  // todo: future use
-  pub length: u8,
+  pub length: u16,
   pub payload: CommsPayload,
 }
 
@@ -85,7 +86,7 @@ impl Message {
       id: 0,
       fragments: 1,
       fragment: 1,
-      length: take as u8,
+      length: take as u16,
       payload: buf,
     }
   }
@@ -99,13 +100,35 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
   // Build unframed message (header + payload)
   let mut buf: CommsFrameBuf = Vec::new();
   let len_usize = core::cmp::min(msg.payload.len(), COMMS_MAX_PAYLOAD);
-  let len: u8 = core::cmp::min(msg.length as usize, len_usize) as u8;
+  let len: u16 = len_usize as u16; // Use actual payload length, not msg.length field
+
+  defmt::debug!(
+    "Encoding: payload.len()={}, len_field={}, len_usize={}",
+    msg.payload.len(),
+    msg.length,
+    len_usize
+  );
+  defmt::debug!("Message payload hex: {:02x}", &msg.payload[..]);
+
   buf.extend_from_slice(&msg.command.to_le_bytes()).ok();
   buf.push(msg.id).ok();
   buf.extend_from_slice(&msg.fragments.to_le_bytes()).ok();
   buf.extend_from_slice(&msg.fragment.to_le_bytes()).ok();
-  buf.push(len).ok();
-  buf.extend_from_slice(&msg.payload[..len as usize]).ok();
+  buf.extend_from_slice(&len.to_le_bytes()).ok();
+
+  defmt::debug!(
+    "Header encoded: {} bytes, about to add {} payload bytes",
+    buf.len(),
+    len_usize
+  );
+  buf.extend_from_slice(&msg.payload[..len_usize]).ok();
+
+  defmt::debug!(
+    "Final buffer: {} bytes, hex: {:02x}",
+    buf.len(),
+    &buf[..core::cmp::min(16, buf.len())]
+  );
+  defmt::debug!("Encoded frame size: {} (header + {} payload)", buf.len(), len_usize);
 
   // HDLC-frame and write
   let mut framed: FramedBuf = Vec::new();
@@ -141,7 +164,7 @@ pub fn read() -> Option<Message> {
 // --- Internal helpers ---
 
 /// Try to decode an HDLC frame from a buffer of received serial data
-fn try_decode_hdlc(buf: &mut Vec<u8, 128>, out: &mut Vec<u8, 128>) -> bool {
+fn try_decode_hdlc(buf: &mut ByteVec, out: &mut ByteVec) -> bool {
   hdlc::hdlc_deframe(buf, out).is_some()
 }
 
@@ -154,22 +177,71 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
   let id = bytes[2];
   let frags = u16::from_le_bytes([bytes[3], bytes[4]]);
   let frag = u16::from_le_bytes([bytes[5], bytes[6]]);
-  let len = bytes[7] as usize;
+  let len = u16::from_le_bytes([bytes[7], bytes[8]]) as usize;
   let total = COMMS_HEADER_LEN + len;
-  if bytes.len() < total {
-    return None;
+
+  defmt::debug!(
+    "Parsing: frame_len={}, header_len={}, payload_len={}, total_expected={}",
+    bytes.len(),
+    COMMS_HEADER_LEN,
+    len,
+    total
+  );
+
+  // Hex dump first 16 bytes of frame for debugging
+  if bytes.len() > 0 {
+    let dump_len = core::cmp::min(16, bytes.len());
+    defmt::debug!("Frame hex dump (first {} bytes): {:02x}", dump_len, &bytes[..dump_len]);
   }
+
+  // Check if frame has the expected length (header + payload)
+  if bytes.len() != total {
+    // Handle common case: extra 0x00 byte inserted after header
+    if bytes.len() == total + 1 && bytes.len() > COMMS_HEADER_LEN && bytes[COMMS_HEADER_LEN] == 0x00 {
+      defmt::warn!("Found extra 0x00 byte at position {}, skipping it", COMMS_HEADER_LEN);
+    } else {
+      defmt::warn!("Frame length mismatch: got {}, expected {}", bytes.len(), total);
+      return None;
+    }
+  }
+
   let mut payload: CommsPayload = Vec::new();
   let copy = core::cmp::min(len, COMMS_MAX_PAYLOAD);
-  payload
-    .extend_from_slice(&bytes[COMMS_HEADER_LEN..COMMS_HEADER_LEN + copy])
-    .ok()?;
+
+  // Skip extra 0x00 byte if present (workaround for HDLC deframing issue)
+  let payload_start = if bytes.len() == total + 1 && bytes.len() > COMMS_HEADER_LEN && bytes[COMMS_HEADER_LEN] == 0x00 {
+    COMMS_HEADER_LEN + 1 // Skip the extra byte
+  } else {
+    COMMS_HEADER_LEN // Normal case
+  };
+
+  defmt::debug!("Payload parsing: start_offset={}, copy={} bytes", payload_start, copy);
+
+  if bytes.len() >= payload_start + copy {
+    payload
+      .extend_from_slice(&bytes[payload_start..payload_start + copy])
+      .ok()?;
+  } else {
+    defmt::warn!(
+      "Not enough bytes for payload: need {}, have {}",
+      payload_start + copy,
+      bytes.len()
+    );
+    return None;
+  }
+
+  defmt::debug!(
+    "Parsed payload: requested={}, copied={}, actual_len={}",
+    len,
+    copy,
+    payload.len()
+  );
   Some(Message {
     command: cmd,
     id,
     fragments: frags,
     fragment: frag,
-    length: len as u8,
+    length: len as u16,
     payload,
   })
 }

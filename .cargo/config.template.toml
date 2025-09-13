@@ -34,5 +34,5 @@ target = "thumbv7em-none-eabihf"
 [alias]
 cb = "clean"
 bx = "build --bin"
-flash = "run --bin"
+start = "run --bin"
 tests = "test --test integration"
