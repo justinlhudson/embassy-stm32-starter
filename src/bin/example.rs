@@ -43,7 +43,7 @@ async fn main(_spawner: Spawner) {
     // Print stack usage in KB only if changed
     let sp: u32;
     unsafe { core::arch::asm!("mov {}, sp", out(reg) sp) }
-    if sp != last_sp {
+    if sp > last_sp {
       let stack_used = ram_end.saturating_sub(sp);
       let stack_used_kb = stack_used / 1024;
       info!("Stack used: {} KB (SP: {=u32:x})", stack_used_kb, sp);
