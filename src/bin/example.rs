@@ -33,44 +33,24 @@ async fn main(_spawner: Spawner) {
   let (led, button, mut wdt, rtc, mut comm) = BoardConfig::init_all_hardware(_spawner, p);
 
   _spawner
-    .spawn(led_blink_custom(led, hardware::timers::TimingUtils::FAST_BLINK_MS))
+    .spawn(led_blink(led, hardware::timers::TimingUtils::FAST_BLINK_MS))
     .ok();
   _spawner.spawn(button_monitor(button)).ok();
   _spawner.spawn(rtc_clock_task(rtc)).ok();
 
   info!("U ready? U an't ready!");
-
   loop {
-    if let Some(msg) = embassy_stm32_starter::hardware::serial::read() {
-      info!("UART RX ({} bytes)", msg.len());
-      let _ = comm.write_all(&msg);
-      let _ = comm.write_all(b"\r\n");
-      let _ = comm.flush();
-    }
-
-    if let Some(frame) = embassy_stm32_starter::service::comm::try_read_decoded_hdlc() {
-      info!("HDLC frame ({} bytes)", frame.len());
-    }
-
-    if let Some(msg) = embassy_stm32_starter::service::comm::try_read_comms_msg() {
+    if let Some(msg) = embassy_stm32_starter::service::comm::read() {
       info!(
-        "Comms msg: command={}, id=0x{:08x}, {}/{} bytes",
+        "Comms msg: command={}, {}/{} bytes",
         msg.command,
-        msg.id,
         msg.payload.len(),
         embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
       );
 
       if msg.command == 0x03 {
         let mut tx_ref = &mut comm;
-        embassy_stm32_starter::service::comm::write_comms_frame(
-          &mut tx_ref,
-          msg.command,
-          msg.id,
-          msg.fragments,
-          msg.fragment,
-          &msg.payload,
-        );
+        embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
       }
     }
 

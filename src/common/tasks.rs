@@ -10,7 +10,7 @@ use embassy_stm32::rtc::Rtc;
 
 /// LED blinking task - configurable blink rate
 #[embassy_executor::task]
-pub async fn led_blink_custom(mut led: Output<'static>, delay_ms: u64) {
+pub async fn led_blink(mut led: Output<'static>, delay_ms: u64) {
   loop {
     info!("LED: high");
     LedControl::turn_on(&mut led);
