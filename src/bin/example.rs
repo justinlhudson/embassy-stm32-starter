@@ -56,7 +56,7 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
   loop {
     if let Some(msg) = embassy_stm32_starter::service::comm::read() {
       info!(
-        "message: command={}, {}/{} bytes",
+        "message (rx): command={}, {}/{} bytes",
         msg.command,
         msg.payload.len(),
         embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
@@ -65,6 +65,12 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
       if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
         let mut tx_ref = &mut tx;
         embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
+        info!(
+          "message (tx): command={}, {}/{} bytes",
+          msg.command,
+          msg.payload.len(),
+          embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
+        );
       }
     } else {
       // Small backoff when no message is ready
