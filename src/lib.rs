@@ -45,3 +45,17 @@ pub mod prelude {
 // Board configuration - included from root board.rs file (copied by setup.sh)
 #[path = "../board.rs"]
 pub mod board;
+
+// Macro for compile-time board configuration validation
+#[macro_export]
+macro_rules! validate_board_config {
+  ($config:ty) => {
+    // Compile-time checks to ensure the board configuration is valid
+    const _: fn() = || {
+      fn assert_board_configuration<T: crate::board::BoardConfiguration>() {}
+      fn assert_interrupt_handlers<T: crate::board::InterruptHandlers>() {}
+      assert_board_configuration::<$config>();
+      assert_interrupt_handlers::<$config>();
+    };
+  };
+}

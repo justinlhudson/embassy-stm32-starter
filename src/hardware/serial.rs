@@ -21,6 +21,11 @@ bind_interrupts!(pub struct IrqsUsart3 {
     USART3 => usart::InterruptHandler<embassy_stm32::peripherals::USART3>;
 });
 
+// Also expose a binding for USART6 for boards that use it (e.g., Nucleo-144 F413ZH VCP)
+bind_interrupts!(pub struct IrqsUsart6 {
+    USART6 => usart::InterruptHandler<embassy_stm32::peripherals::USART6>;
+});
+
 // DMA-based serial receiver with idle interrupt detection
 pub struct SerialReceiver {
   uart_rx: UartRx<'static, Async>,
@@ -114,6 +119,7 @@ pub async fn recv_raw() -> Vec<u8, 256> {
 /// Get the interrupt handler type aliases for export to board configs
 pub use Irqs as Serial2Irqs;
 pub use IrqsUsart3 as Serial3Irqs;
+pub use IrqsUsart6 as Serial6Irqs;
 
 /// Generic serial initializer: takes USART peri, RX/TX pins, Irqs binding, TX/RX DMA, sets 115200 and spawns tasks.
 pub fn init_serial<T, RX, TX, TXDMA, RXDMA>(

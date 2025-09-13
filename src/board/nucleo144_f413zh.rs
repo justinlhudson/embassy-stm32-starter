@@ -1,9 +1,9 @@
 // Board configuration for STM32 Nucleo-144 Development Board with STM32F413ZH
 // Board configuration for STM32 Nucleo-144 Development Board with STM32F413ZH
-// 
+//
 // Board specifications:
 // - STM32F413ZH MCU (ARM Cortex-M4F @ 100 MHz)
-// - 1536 KB Flash, 320 KB SRAM  
+// - 1536 KB Flash, 320 KB SRAM
 // - LQFP144 package with extensive GPIO
 // - Built-in ST-LINK/V2-1 debugger
 // - Arduino Uno R3 and ST morpho connector compatibility
@@ -11,95 +11,96 @@
 //
 // Pin assignments for Nucleo-144 F413ZH:
 // - User LED1 (LD1): PB0  (Green LED)
-// - User LED2 (LD2): PB7  (Blue LED) 
+// - User LED2 (LD2): PB7  (Blue LED)
 // - User LED3 (LD3): PB14 (Red LED)
 // - User Button (B1): PC13 (Blue tactile button)
 //
 // Note: This board has 3 user LEDs, we'll use LD1 (Green) as the primary LED
 
-use embassy_stm32::gpio::{Input, Output};
-use embassy_executor::Spawner;
-use embassy_stm32::mode::Async;
-use embassy_stm32::usart::UartTx;
-use embassy_stm32::rtc::{Rtc, RtcConfig};
-use embassy_stm32::wdg::IndependentWatchdog;
-use crate::hardware::serial;
-use crate::hardware::GpioDefaults;
 use super::{BoardConfiguration, InterruptHandlers};
+use crate::hardware::GpioDefaults;
+use crate::hardware::serial;
+use embassy_executor::Spawner;
+use embassy_stm32::gpio::{Input, Output};
+use embassy_stm32::mode::Async;
+use embassy_stm32::rtc::{Rtc, RtcConfig};
+use embassy_stm32::usart::UartTx;
+use embassy_stm32::wdg::IndependentWatchdog;
 
 pub struct BoardConfig;
 
 // Implement the minimal trait per base.rs
 impl BoardConfiguration for BoardConfig {
-	fn board_name() -> &'static str {
-		"STM32 Nucleo-144 F413ZH"
-	}
+  fn board_name() -> &'static str {
+    "STM32 Nucleo-144 F413ZH"
+  }
 }
 
 impl InterruptHandlers for BoardConfig {
-	fn setup() {
-		// All STM32F413ZH-specific interrupt handlers are defined below
-	}
+  fn setup() {
+    // All STM32F413ZH-specific interrupt handlers are defined below
+  }
 }
 
 impl BoardConfig {
-	// Board constants (mirroring F446RE style)
-	pub const MCU_NAME: &'static str = "STM32F413ZH";
-	pub const FLASH_SIZE_KB: u32 = 1536;   // 1.5 MB Flash
-	pub const RAM_SIZE_KB: u32 = 320;      // 320 KB SRAM total (256KB + 64KB)
-	pub const LED_PIN_NAME: &'static str = "PB0";   // LD1 - Green LED
-	pub const LED_DESCRIPTION: &'static str = "Built-in LED LD1 (Green)";
-	pub const BUTTON_PIN_NAME: &'static str = "PC13"; // B1 - Blue tactile button
-	pub const BUTTON_DESCRIPTION: &'static str = "Built-in button B1 (Blue)";
+  // Board constants (mirroring F446RE style)
+  pub const BOARD_NAME: &'static str = "STM32 Nucleo-144 F413ZH";
+  pub const MCU_NAME: &'static str = "STM32F413ZH";
+  pub const FLASH_SIZE_KB: u32 = 1536; // 1.5 MB Flash
+  pub const RAM_SIZE_KB: u32 = 320; // 320 KB SRAM total (256KB + 64KB CCM)
+  pub const LED_PIN_NAME: &'static str = "PB0"; // LD1 - Green LED
+  pub const LED_DESCRIPTION: &'static str = "Built-in LED LD1 (Green)";
+  pub const BUTTON_PIN_NAME: &'static str = "PC13"; // B1 - Blue tactile button
+  pub const BUTTON_DESCRIPTION: &'static str = "Built-in button B1 (Blue)";
 
-	/// Initialize USART3 serial for this board (PD9=TX, PD8=RX), spawn RX/HDLC tasks, and return TX half
-	pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
-		// On STM32F413ZH Nucleo-144, default VCP often maps to USART3 (PD8=RX, PD9=TX)
-		// DMA mapping (common on F4): TX = DMA1_CH3, RX = DMA1_CH1 (adjust if needed per actual board schematic)
-		serial::init_serial(
-			spawner,
-			p.USART3,
-			p.PD8,  // RX
-			p.PD9,  // TX
-			serial::Serial3Irqs,
-			p.DMA1_CH3, // TX DMA for USART3
-			p.DMA1_CH1, // RX DMA for USART3
-		)
-	}
+  /// Initialize USART3 serial for this board (PD8=TX, PD9=RX) - ST-LINK VCP, spawn RX/HDLC tasks, and return TX half
+  pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
+    // On STM32F413ZH Nucleo-144, using USART3 (PD9=RX, PD8=TX) for ST-LINK VCP
+    // DMA mapping for USART3: TX = DMA1_CH3, RX = DMA1_CH1
+    serial::init_serial(
+      spawner,
+      p.USART3,
+      p.PD9, // RX
+      p.PD8, // TX
+      serial::Serial3Irqs,
+      p.DMA1_CH3, // TX DMA for USART3
+      p.DMA1_CH1, // RX DMA for USART3
+    )
+  }
 
-	/// Initialize LED, button, watchdog, RTC, and serial for this board.
-	pub fn init_all_hardware(
-		spawner: Spawner,
-		p: embassy_stm32::Peripherals,
-	) -> (
-		Output<'static>,
-		Input<'static>,
-		IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
-		Rtc,
-		UartTx<'static, Async>,
-	) {
-		// GPIO
-		let led = Output::new(p.PB0, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
-		let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
+  /// Initialize LED, button, watchdog, RTC, and serial for this board.
+  pub fn init_all_hardware(
+    spawner: Spawner,
+    p: embassy_stm32::Peripherals,
+  ) -> (
+    Output<'static>,
+    Input<'static>,
+    IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
+    Rtc,
+    UartTx<'static, Async>,
+  ) {
+    // GPIO
+    let led = Output::new(p.PB0, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
+    let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
 
-		// Watchdog and RTC
-		let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
-		let rtc = Rtc::new(p.RTC, RtcConfig::default());
-		wdt.unleash();
+    // Watchdog and RTC
+    let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
+    let rtc = Rtc::new(p.RTC, RtcConfig::default());
+    wdt.unleash();
 
-		// Serial (USART3 on PD9/PD8)
-	let comm = serial::init_serial(
-			spawner,
-			p.USART3,
-			p.PD8,         // RX
-			p.PD9,         // TX
-			serial::Serial3Irqs,
-			p.DMA1_CH3,    // TX DMA for USART3
-			p.DMA1_CH1,    // RX DMA for USART3
-		);
+    // Serial (USART3 on PD8/PD9 - ST-LINK VCP)
+    let comm = serial::init_serial(
+      spawner,
+      p.USART3,
+      p.PD9, // RX
+      p.PD8, // TX
+      serial::Serial3Irqs,
+      p.DMA1_CH3, // TX DMA for USART3
+      p.DMA1_CH1, // RX DMA for USART3
+    );
 
-	(led, button, wdt, rtc, comm)
-	}
+    (led, button, wdt, rtc, comm)
+  }
 }
 
 // Compile-time validation
@@ -109,7 +110,7 @@ crate::validate_board_config!(BoardConfig);
 #[unsafe(no_mangle)]
 extern "C" fn WWDG() {}
 
-#[unsafe(no_mangle)] 
+#[unsafe(no_mangle)]
 extern "C" fn I2C1_EV() {}
 
 #[unsafe(no_mangle)]
