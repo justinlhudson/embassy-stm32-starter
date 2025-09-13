@@ -9,43 +9,64 @@ license = "MIT OR Apache-2.0"
 harness = false
 
 [[bin]]
-name = "blinky"
+name = "example"
+path = "src/bin/example.rs"
 test = false
 bench = false
 
 [dependencies]
-cortex-m = { version = ">=0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m = { version = ">=0.7.7", features = [
+  "inline-asm",
+  "critical-section-single-core",
+] }
 cortex-m-rt = ">=0.7.5"
 defmt = ">=1.0.1"
 defmt-rtt = ">=1.0.0"
 panic-probe = { version = ">=1.0.0", features = ["print-defmt"] }
-chrono = { version = ">=0.4.41", default-features = false}
+chrono = { version = ">=0.4.41", default-features = false }
 stm32f4xx-hal = { version = "0.22.1", features = ["{{STM32_HAL_FEATURE}}"] }
-embassy-stm32 = { version = ">=0.4.0", features = ["defmt", "{{STM32_EMBASSY_FEATURE}}", "memory-x", "time-driver-tim4", "exti", "chrono", "rt"] }
+embassy-stm32 = { version = ">=0.4.0", features = [
+  "defmt",
+  "{{STM32_EMBASSY_FEATURE}}",
+  "memory-x",
+  "time-driver-tim4",
+  "exti",
+  "chrono",
+  "rt",
+] }
 embassy-sync = { version = ">=0.7.2", features = ["defmt"] }
-embassy-executor = { version = ">=0.9.1", features = ["defmt", "arch-cortex-m", "executor-thread", "executor-interrupt"] }
-embassy-time = { version = ">=0.5.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-executor = { version = ">=0.9.1", features = [
+  "defmt",
+  "arch-cortex-m",
+  "executor-thread",
+  "executor-interrupt",
+] }
+embassy-time = { version = ">=0.5.0", features = [
+  "defmt",
+  "defmt-timestamp-uptime",
+  "tick-hz-32_768",
+] }
 heapless = "0.8.0"
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.0"
 
 [build-dependencies]
-cc = ">=1.2.35"  # gcc for build.rs
+cc = ">=1.2.35" # gcc for build.rs
 
 [[test]]
 name = "integration"
 harness = false
 
 [dev-dependencies]
-semihosting = ">=0.1.20"  # for tests only
+semihosting = ">=0.1.20" # for tests only
 
 [profile.dev]
-opt-level = 0 # no optimizations
+opt-level = 0     # no optimizations
 codegen-units = 1 # compile as single unit
-debug = true # full debug info (required for RTT)
+debug = true      # full debug info (required for RTT)
 
 [profile.release]
-opt-level = 's' # optimize for size
+opt-level = 's'   # optimize for size
 codegen-units = 1 # compile as single unit
-lto = 'fat' # link time optimizations
-debug = false # no debug (no RTT in release)
+lto = 'fat'       # link time optimizations
+debug = false     # no debug (no RTT in release)

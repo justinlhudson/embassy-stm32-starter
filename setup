@@ -147,4 +147,4 @@ else
     echo "⚠️  $LAUNCH_TEMPLATE not found; skipping chip update."
 fi
 
-echo "🔨 Ready to build with: cargo build --bin blinky"
+echo "🔨 Ready to build with: cargo build --bin example"

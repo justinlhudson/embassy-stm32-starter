@@ -17,151 +17,151 @@
 use embassy_stm32::gpio::{Input, Output};
 // use embassy_stm32::peripherals;
 use super::{BoardConfiguration, InterruptHandlers};
+use crate::hardware::GpioDefaults;
+use crate::hardware::serial;
 use embassy_executor::Spawner;
 use embassy_stm32::mode::Async;
-use embassy_stm32::usart::UartTx;
-use crate::hardware::serial;
 use embassy_stm32::rtc::{Rtc, RtcConfig};
+use embassy_stm32::usart::UartTx;
 use embassy_stm32::wdg::IndependentWatchdog;
-use crate::hardware::GpioDefaults;
 
 pub struct BoardConfig;
 
 impl BoardConfig {
-    // Board constants (for compatibility with existing applications)
-    pub const BOARD_NAME: &'static str = "STM32 Nucleo-64 F446RE";
-    pub const MCU_NAME: &'static str = "STM32F446RE";
-    pub const FLASH_SIZE_KB: u32 = 512;
-    pub const RAM_SIZE_KB: u32 = 128;
-    pub const LED_PIN_NAME: &'static str = "PA5";
-    pub const LED_DESCRIPTION: &'static str = "Green User LED (LD2)";
-    pub const BUTTON_PIN_NAME: &'static str = "PC13";
-    pub const BUTTON_DESCRIPTION: &'static str = "Blue User Button (B1)";
-    
-    /// Initialize LED, button, watchdog, RTC, and serial for this board.
-    pub fn init_all_hardware(
-        spawner: Spawner,
-        p: embassy_stm32::Peripherals,
-    ) -> (
-        Output<'static>,
-        Input<'static>,
-        IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
-        Rtc,
-        UartTx<'static, Async>,
-    ) {
-        // GPIO
-        let led = Output::new(p.PA5, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
-        let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
+  // Board constants (for compatibility with existing applications)
+  pub const BOARD_NAME: &'static str = "STM32 Nucleo-64 F446RE";
+  pub const MCU_NAME: &'static str = "STM32F446RE";
+  pub const FLASH_SIZE_KB: u32 = 512;
+  pub const RAM_SIZE_KB: u32 = 128;
+  pub const LED_PIN_NAME: &'static str = "PA5";
+  pub const LED_DESCRIPTION: &'static str = "Green User LED (LD2)";
+  pub const BUTTON_PIN_NAME: &'static str = "PC13";
+  pub const BUTTON_DESCRIPTION: &'static str = "Blue User Button (B1)";
 
-        // Watchdog and RTC
-        let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
-        let rtc = Rtc::new(p.RTC, RtcConfig::default());
-        wdt.unleash();
+  /// Initialize LED, button, watchdog, RTC, and serial for this board.
+  pub fn init_all_hardware(
+    spawner: Spawner,
+    p: embassy_stm32::Peripherals,
+  ) -> (
+    Output<'static>,
+    Input<'static>,
+    IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
+    Rtc,
+    UartTx<'static, Async>,
+  ) {
+    // GPIO
+    let led = Output::new(p.PA5, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
+    let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
 
-        // Serial (USART2 on PA2/PA3)
-        let comms = serial::init_serial(
-            spawner,
-            p.USART2,
-            p.PA3,          // RX
-            p.PA2,          // TX
-            serial::Serial2Irqs,   // USART2 irqs
-            p.DMA1_CH6,     // TX DMA
-            p.DMA1_CH5,     // RX DMA
-        );
+    // Watchdog and RTC
+    let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
+    let rtc = Rtc::new(p.RTC, RtcConfig::default());
+    wdt.unleash();
 
-        (led, button, wdt, rtc, comms)
-    }
+    // Serial (USART2 on PA2/PA3)
+    let comm = serial::init_serial(
+      spawner,
+      p.USART2,
+      p.PA3,               // RX
+      p.PA2,               // TX
+      serial::Serial2Irqs, // USART2 irqs
+      p.DMA1_CH6,          // TX DMA
+      p.DMA1_CH5,          // RX DMA
+    );
 
-    /// Initialize USART2 serial for this board (PA2=TX, PA3=RX), spawn RX/HDLC tasks, and return TX half
-    pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
-        serial::init_serial(
-            spawner,
-            p.USART2,
-            p.PA3,          // RX
-            p.PA2,          // TX
-            serial::Serial2Irqs,   // USART2 irqs
-            p.DMA1_CH6,     // TX DMA
-            p.DMA1_CH5,     // RX DMA
-        )
-    }
+    (led, button, wdt, rtc, comm)
+  }
+
+  /// Initialize USART2 serial for this board (PA2=TX, PA3=RX), spawn RX/HDLC tasks, and return TX half
+  pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
+    serial::init_serial(
+      spawner,
+      p.USART2,
+      p.PA3,               // RX
+      p.PA2,               // TX
+      serial::Serial2Irqs, // USART2 irqs
+      p.DMA1_CH6,          // TX DMA
+      p.DMA1_CH5,          // RX DMA
+    )
+  }
 }
 
 impl BoardConfiguration for BoardConfig {
-	fn board_name() -> &'static str {
-		"STM32 Nucleo-64 F446RE"
-	}
+  fn board_name() -> &'static str {
+    "STM32 Nucleo-64 F446RE"
+  }
 }
 
 impl InterruptHandlers for BoardConfig {
-	fn setup() {
-		// All STM32F446RE-specific interrupt handlers are defined below
-	}
+  fn setup() {
+    // All STM32F446RE-specific interrupt handlers are defined below
+  }
 }
 
 // STM32F446RE interrupt handlers - required for linking
 #[unsafe(no_mangle)]
 extern "C" fn DefaultHandler() {
-    // Default handler - just hang
-    loop {}
+  // Default handler - just hang
+  loop {}
 }
 
 // Provide default implementations for the missing interrupt handlers
 #[unsafe(no_mangle)]
 extern "C" fn PVD() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn OTG_HS_EP1_OUT() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn OTG_HS_EP1_IN() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn OTG_HS_WKUP() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn OTG_HS() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn SAI1() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn SAI2() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn QUADSPI() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn CEC() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn SPDIF_RX() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn FMPI2C1_EV() {
-    DefaultHandler();
+  DefaultHandler();
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn FMPI2C1_ER() {
-    DefaultHandler();
+  DefaultHandler();
 }

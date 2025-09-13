@@ -11,13 +11,14 @@ A modern, async embedded Rust project demonstrating real-time system capabilitie
 - [Testing](#-testing)
 - [License](#-license)
 
-
 ## ⚡ Configuration
 
 ### Automatic Configuration Management
+
 The project uses a **template-based configuration system** that automatically manages all MCU-specific settings with a single command.
 
 #### **Quick Board Switch** 🚀
+
 ```bash
 
 # Example: configure for STM32F446RE Nucleo board
@@ -30,15 +31,16 @@ The project uses a **template-based configuration system** that automatically ma
 ```
 
 #### **What Gets Configured**
+
 The setup script automatically updates **5 critical files**:
 
-| File | Purpose | Contents |
-|------|---------|----------|
-| `memory.template.x` | Linker memory layout template | Contains all board memory configs, only one active at a time |
-| `board.template.rs` | Board config template | Used as the source for `board.rs` |
-| `Cargo.template.toml` | Cargo config template | Used as the source for `Cargo.toml` |
-| `.cargo/config.template.toml` | Build config template | Used as the source for `.cargo/config.toml` |
-| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for `launch.json` |
+| File                           | Purpose                       | Contents                                                     |
+| ------------------------------ | ----------------------------- | ------------------------------------------------------------ |
+| `memory.template.x`            | Linker memory layout template | Contains all board memory configs, only one active at a time |
+| `board.template.rs`            | Board config template         | Used as the source for `board.rs`                            |
+| `Cargo.template.toml`          | Cargo config template         | Used as the source for `Cargo.toml`                          |
+| `.cargo/config.template.toml`  | Build config template         | Used as the source for `.cargo/config.toml`                  |
+| `.vscode/launch.template.json` | VS Code debug config template | Used as the source for `launch.json`                         |
 
 ## 🖥️ VS Code Support
 
@@ -54,7 +56,7 @@ The included VS Code setup provides launch configurations for debugging embedded
 embassy_stm32_starter/
 ├── 📄 setup                      # 🎯 MCU configuration management script
 ├── 📄 Cargo.toml                 # 🔄 Active project configuration (managed by setup)
-├── 📄 memory.x                   # 🔄 Active memory layout (managed by setup) 
+├── 📄 memory.x                   # 🔄 Active memory layout (managed by setup)
 ├── 📄 board.rs                   # 🔄 Active board configuration (managed by setup)
 ├── .vscode/                     # VS Code settings and debug configuration
 │   ├── launch.json              # Debugger config (managed by setup)
@@ -70,47 +72,53 @@ embassy_stm32_starter/
 │   ├── 📂 common/                # 🔄 Application Layer
 │   │   └── 📄 tasks.rs           # Embassy async task definitions
 │   └── 📂 bin/                   # Binary applications
-│       └── 📄 blinky.rs          # 🎯 Main Embassy async application example (MCU-agnostic)
+│       └── 📄 example.rs         # 🎯 Main Embassy async application example (MCU-agnostic)
 └── 📂 tests/                     # Integration tests
     └── 📄 integration.rs         # Hardware testing
 ```
+
 ## 🛠️ Setup
 
 ### Prerequisites
+
 1. **Rust Toolchain** (1.70.0 or later)
+
    ```bash
    # Install Rust
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    source ~/.cargo/env
-   
+
    # Add ARM Cortex-M target
    rustup target add thumbv7em-none-eabihf
    ```
 
 2. **Probe-rs** (Hardware interface tool)
+
    ```bash
    # Install probe-rs for flashing and debugging
    cargo install probe-rs-tools --features cli
-   
+
    # Verify installation
    probe-rs list
    ```
 
 3. **ARM GCC Toolchain** (For some build dependencies)
+
    ```bash
    # macOS
    brew install arm-none-eabi-gcc
-   
+
    # Ubuntu/Debian
    sudo apt install gcc-arm-none-eabi
-   
+
    # Arch Linux
    sudo pacman -S arm-none-eabi-gcc
    ```
 
 ### Hardware Setup
+
 1. **Connect Board**: USB cable to ST-LINK connector
-2. **Verify Connection**: 
+2. **Verify Connection**:
    ```bash
    probe-rs list
    ```
@@ -118,6 +126,7 @@ embassy_stm32_starter/
 ## 🚀 Flashing
 
 ### Quick Start
+
 ```bash
 # Clone and navigate to project
 git clone <repository-url>
@@ -128,15 +137,16 @@ cd embassy_stm32_starter
 ./setup nucleo
 
 # Build the project
-cargo build --bin blinky
+cargo build --bin example
 
 # Flash and run with RTT logging
-cargo run --bin blinky
+cargo run --bin example
 ```
 
 ## 🧪 Testing
 
 ### Hardware-in-the-Loop Tests
+
 ```bash
 # Run integration tests on hardware
 cargo test --test integration
@@ -154,10 +164,10 @@ This project is licensed under either of
 
 at your option.
 
-
 ## 👤 Author
 
-**Justin L. Hudson** - *Project Creator & Maintainer*
+**Justin L. Hudson** - _Project Creator & Maintainer_
+
 - Email: justinlhudson@gmail.com
 - GitHub: [@justinlhudson](https://github.com/justinlhudson)
 

@@ -2,10 +2,10 @@
 
 /// Stub trait for board configuration
 pub trait BoardConfiguration {
-	fn board_name() -> &'static str;
+  fn board_name() -> &'static str;
 }
 
 /// Stub trait for interrupt handlers
 pub trait InterruptHandlers {
-	fn setup();
+  fn setup();
 }

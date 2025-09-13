@@ -11,34 +11,32 @@ pub use defmt::*; // re-export all defmt macros for convenience
 
 // Hardware abstraction layer modules
 pub mod hardware {
-    pub mod gpio;
-    pub mod timers;
-    pub mod serial;
-    pub use gpio::*;
-    pub use timers::*;
-    pub use serial::*;
+  pub mod gpio;
+  pub mod serial;
+  pub mod timers;
+  pub use gpio::*;
+  pub use serial::*;
+  pub use timers::*;
 }
 
 // Services layer
 pub mod service {
-    pub mod comm;
-    pub use comm::*;
+  pub mod comm;
+  pub use comm::*;
 }
 
 // Protocol modules
 pub mod protocol {
-    pub mod hdlc;
-    pub use hdlc::*;
+  pub mod hdlc;
+  pub use hdlc::*;
 }
 
-// Common/shared functionality modules  
+// Common/shared functionality modules
 pub mod common {
-    pub mod tasks;
-    pub use tasks::*;
+  pub mod tasks;
+  pub use tasks::*;
 }
 
 // Board configuration - included from root board.rs file (copied by setup.sh)
 #[path = "../board.rs"]
 pub mod board;
-
-

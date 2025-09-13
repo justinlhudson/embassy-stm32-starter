@@ -88,7 +88,7 @@ impl BoardConfig {
 		wdt.unleash();
 
 		// Serial (USART3 on PD9/PD8)
-		let comms = serial::init_serial(
+	let comm = serial::init_serial(
 			spawner,
 			p.USART3,
 			p.PD8,         // RX
@@ -98,7 +98,7 @@ impl BoardConfig {
 			p.DMA1_CH1,    // RX DMA for USART3
 		);
 
-		(led, button, wdt, rtc, comms)
+	(led, button, wdt, rtc, comm)
 	}
 }
 
