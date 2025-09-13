@@ -56,7 +56,7 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
   loop {
     if let Some(msg) = embassy_stm32_starter::service::comm::read() {
       info!(
-        "Comms msg: command={}, {}/{} bytes",
+        "message: command={}, {}/{} bytes",
         msg.command,
         msg.payload.len(),
         embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
