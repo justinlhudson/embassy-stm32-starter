@@ -13,6 +13,33 @@ pub type FramedBuf = Vec<u8, 128>;
 pub type CommsPayload = Vec<u8, COMMS_MAX_PAYLOAD>;
 pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=11 now
 
+/// Command identifiers for Comms messages.
+#[repr(u16)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Command {
+  Ack = 0x01,
+  Nak = 0x02,
+  Ping = 0x03,
+}
+
+impl From<Command> for u16 {
+  fn from(c: Command) -> Self {
+    c as u16
+  }
+}
+
+impl core::convert::TryFrom<u16> for Command {
+  type Error = ();
+  fn try_from(value: u16) -> Result<Self, Self::Error> {
+    match value {
+      0x01 => Ok(Command::Ack),
+      0x02 => Ok(Command::Nak),
+      0x03 => Ok(Command::Ping),
+      _ => Err(()),
+    }
+  }
+}
+
 // Comms message format (little-endian):
 // - command:      u16
 // - id:           u8
@@ -49,12 +76,12 @@ impl Default for CommsMsg {
 
 impl CommsMsg {
   /// Convenience constructor with defaults (id=0, fragments=1, fragment=1).
-  pub fn new(command: u16, payload: &[u8]) -> Self {
+  pub fn new<C: Into<u16>>(command: C, payload: &[u8]) -> Self {
     let mut buf: Vec<u8, COMMS_MAX_PAYLOAD> = Vec::new();
     let take = core::cmp::min(payload.len(), COMMS_MAX_PAYLOAD);
     let _ = buf.extend_from_slice(&payload[..take]);
     Self {
-      command,
+      command: command.into(),
       id: 0,
       fragments: 1,
       fragment: 1,

@@ -5,6 +5,7 @@ use embassy_executor::Spawner;
 use embassy_stm32::Config;
 use embassy_stm32_starter::board::BoardConfig;
 use embassy_stm32_starter::common::tasks::*;
+#[allow(unused_imports)]
 use embassy_stm32_starter::prelude::*;
 use embassy_stm32_starter::*;
 use embassy_time::Timer;
@@ -30,15 +31,28 @@ async fn main(_spawner: Spawner) {
 
   let config = Config::default();
   let p = embassy_stm32::init(config);
-  let (led, button, mut wdt, rtc, mut comm) = BoardConfig::init_all_hardware(_spawner, p);
+  let (led, button, mut wdt, rtc, comm) = BoardConfig::init_all_hardware(_spawner, p);
 
   _spawner
     .spawn(led_blink(led, hardware::timers::TimingUtils::FAST_BLINK_MS))
     .ok();
   _spawner.spawn(button_monitor(button)).ok();
-  _spawner.spawn(rtc_clock_task(rtc)).ok();
+  _spawner.spawn(rtc_clock(rtc)).ok();
+
+  // Spawn comms task (handles RX/echo separately)
+  _spawner.spawn(comm_task(comm)).ok();
 
   info!("U ready? U an't ready!");
+  loop {
+    // Keep feeding the watchdog from the main loop only
+    wdt.pet();
+    Timer::after_millis(hardware::timers::TimingUtils::WATCHDOG_PET_MS).await;
+  }
+}
+
+// Handle comms (receive frames and echo Ping)
+#[embassy_executor::task]
+async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>) {
   loop {
     if let Some(msg) = embassy_stm32_starter::service::comm::read() {
       info!(
@@ -48,14 +62,13 @@ async fn main(_spawner: Spawner) {
         embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
       );
 
-      if msg.command == 0x03 {
-        let mut tx_ref = &mut comm;
+      if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
+        let mut tx_ref = &mut tx;
         embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
       }
+    } else {
+      // Small backoff when no message is ready
+      Timer::after_millis(10).await;
     }
-
-    // Feed watchdog and sleep below the configured timeout (~1s)
-    wdt.pet();
-    Timer::after_millis(hardware::timers::TimingUtils::WATCHDOG_PET_MS).await;
   }
 }

@@ -12,11 +12,9 @@ use embassy_stm32::rtc::Rtc;
 #[embassy_executor::task]
 pub async fn led_blink(mut led: Output<'static>, delay_ms: u64) {
   loop {
-    info!("LED: high");
     LedControl::turn_on(&mut led);
     TimingUtils::delay_ms(delay_ms).await;
 
-    info!("LED: low");
     LedControl::turn_off(&mut led);
     TimingUtils::delay_ms(delay_ms).await;
   }
@@ -53,7 +51,7 @@ pub async fn heartbeat_task() {
 
 /// RTC clock display task
 #[embassy_executor::task]
-pub async fn rtc_clock_task(mut rtc: Rtc) {
+pub async fn rtc_clock(mut rtc: Rtc) {
   // Set initial datetime
   let initial_time = NaiveDate::from_ymd_opt(2024, 1, 1)
     .unwrap()
