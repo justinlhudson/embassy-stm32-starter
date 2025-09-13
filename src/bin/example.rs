@@ -35,8 +35,20 @@ async fn main(_spawner: Spawner) {
   _spawner.spawn(comm_task(comm)).ok();
 
   info!("U ready? U an't ready!");
+  let mut last_sp: u32 = 0;
+  // Set this to your RAM end address (from linker script or BoardConfig)
+  let ram_end: u32 = 0x20020000; // Example: 128KB RAM ends at 0x20020000
   loop {
     wdt.pet(); // pet the watchdog from main loop
+    // Print stack usage in KB only if changed
+    let sp: u32;
+    unsafe { core::arch::asm!("mov {}, sp", out(reg) sp) }
+    if sp != last_sp {
+      let stack_used = ram_end.saturating_sub(sp);
+      let stack_used_kb = stack_used / 1024;
+      info!("Stack used: {} KB (SP: {=u32:x})", stack_used_kb, sp);
+      last_sp = sp;
+    }
     Timer::after_millis(hardware::timers::TimingUtils::WATCHDOG_PET_MS).await;
   }
 }

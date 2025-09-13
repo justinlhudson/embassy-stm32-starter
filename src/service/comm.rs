@@ -1,7 +1,6 @@
-//! HDLC over serial: minimal API with read()/write() using Message.
-
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
+use embassy_sync::mutex::Mutex;
 use heapless::Vec;
 
 use crate::hardware::serial;
@@ -9,10 +8,13 @@ use crate::protocol::hdlc;
 
 // Byte vector aliases used throughout this module
 // Allow room for larger inbound/outbound frames (escaping can ~double size)
-pub type ByteVec = Vec<u8, 300>;
-pub type FramedBuf = Vec<u8, 300>;
 pub type CommsPayload = Vec<u8, COMMS_MAX_PAYLOAD>;
 pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=9 now
+
+/// Size for heapless Vecs used in comms framing/parsing
+pub const COMMS_VEC_SIZE: usize = 4096;
+/// Depth of the comms message queue
+pub const COMMS_QUEUE_DEPTH: usize = 3;
 
 /// Command identifiers for Comms messages.
 #[repr(u16)]
@@ -52,7 +54,7 @@ impl core::convert::TryFrom<u16> for Command {
 // - payload:      [u8; length]
 
 pub const COMMS_HEADER_LEN: usize = 9;
-pub const COMMS_MAX_PAYLOAD: usize = 256; // Max payload size in bytes
+pub const COMMS_MAX_PAYLOAD: usize = 4096; // Max payload size in bytes
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -95,21 +97,19 @@ impl Message {
 }
 
 // Queue of parsed Comms messages
-static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, 8> = Channel::new();
+static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, COMMS_QUEUE_DEPTH> = Channel::new();
+
+// Shared buffer for HDLC frame parsing/deframing
+static SHARED_BUF: Mutex<CriticalSectionRawMutex, Vec<u8, COMMS_VEC_SIZE>> = Mutex::new(Vec::new());
 
 /// Encode a Message and send over HDLC
 pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
-  // Build unframed message (header + payload)
+  // Use a local buffer for encoding to avoid async/await in sync context
   let mut buf: CommsFrameBuf = Vec::new();
   let len_usize = core::cmp::min(msg.payload.len(), COMMS_MAX_PAYLOAD);
-  let len: u16 = len_usize as u16; // Use actual payload length, not msg.length field
+  let len: u16 = len_usize as u16;
 
-  defmt::debug!(
-    "Encoding: payload.len()={}, len_field={}, len_usize={}",
-    msg.payload.len(),
-    msg.length,
-    len_usize
-  );
+  defmt::debug!("Encoding: payload.len()={}, len_field={}, len_usize={}", msg.payload.len(), msg.length, len_usize);
   defmt::debug!("Message payload hex: {:02x}", &msg.payload[..]);
 
   buf.extend_from_slice(&msg.command.to_le_bytes()).ok();
@@ -118,22 +118,14 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
   buf.extend_from_slice(&msg.fragment.to_le_bytes()).ok();
   buf.extend_from_slice(&len.to_le_bytes()).ok();
 
-  defmt::debug!(
-    "Header encoded: {} bytes, about to add {} payload bytes",
-    buf.len(),
-    len_usize
-  );
+  defmt::debug!("Header encoded: {} bytes, about to add {} payload bytes", buf.len(), len_usize);
   buf.extend_from_slice(&msg.payload[..len_usize]).ok();
 
-  defmt::debug!(
-    "Final buffer: {} bytes, hex: {:02x}",
-    buf.len(),
-    &buf[..core::cmp::min(16, buf.len())]
-  );
+  defmt::debug!("Final buffer: {} bytes, hex: {:02x}", buf.len(), &buf[..core::cmp::min(16, buf.len())]);
   defmt::debug!("Encoded frame size: {} (header + {} payload)", buf.len(), len_usize);
 
   // HDLC-frame and write
-  let mut framed: FramedBuf = Vec::new();
+  let mut framed: CommsFrameBuf = Vec::new();
   hdlc::hdlc_frame(&buf, &mut framed);
   serial::write(serial, &framed);
 }
@@ -141,19 +133,23 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
 /// Async task: read bytes from serial queue, deframe, and publish decoded payloads
 #[embassy_executor::task]
 pub async fn serial_hdlc_consumer_task() {
-  let mut rx_buf: ByteVec = Vec::new();
-  let mut decoded: ByteVec = Vec::new();
   loop {
-    // Wait for a new message from the serial RX queue
     let msg = serial::recv_raw().await;
-    // Append to buffer
-    rx_buf.extend_from_slice(&msg).ok();
-    // Try to decode HDLC frame(s)
-    while try_decode_hdlc(&mut rx_buf, &mut decoded) {
-      // Try to parse as a Comms frame and publish
-      if let Some(msg) = try_parse_comms_frame(&decoded) {
+    // Lock and fill the shared buffer with the new message
+    let mut buf_guard = SHARED_BUF.lock().await;
+    let buf = &mut *buf_guard;
+    buf.clear();
+    buf.extend_from_slice(&msg).ok();
+    // Use a local output buffer to avoid double mutable borrow
+    let mut out: Vec<u8, COMMS_VEC_SIZE> = Vec::new();
+    while try_decode_hdlc(buf, &mut out) {
+      if let Some(msg) = try_parse_comms_frame(&out) {
         let _ = COMMS_MSG_QUEUE.try_send(msg);
       }
+      // Prepare for next frame
+      buf.clear();
+      buf.extend_from_slice(&out).ok();
+      out.clear();
     }
   }
 }
@@ -166,7 +162,7 @@ pub fn read() -> Option<Message> {
 // --- Internal helpers ---
 
 /// Try to decode an HDLC frame from a buffer of received serial data
-fn try_decode_hdlc(buf: &mut ByteVec, out: &mut ByteVec) -> bool {
+fn try_decode_hdlc(buf: &mut Vec<u8, COMMS_VEC_SIZE>, out: &mut Vec<u8, COMMS_VEC_SIZE>) -> bool {
   hdlc::hdlc_deframe(buf, out).is_some()
 }
 
@@ -220,24 +216,13 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
   defmt::debug!("Payload parsing: start_offset={}, copy={} bytes", payload_start, copy);
 
   if bytes.len() >= payload_start + copy {
-    payload
-      .extend_from_slice(&bytes[payload_start..payload_start + copy])
-      .ok()?;
+    payload.extend_from_slice(&bytes[payload_start..payload_start + copy]).ok()?;
   } else {
-    defmt::warn!(
-      "Not enough bytes for payload: need {}, have {}",
-      payload_start + copy,
-      bytes.len()
-    );
+    defmt::warn!("Not enough bytes for payload: need {}, have {}", payload_start + copy, bytes.len());
     return None;
   }
 
-  defmt::debug!(
-    "Parsed payload: requested={}, copied={}, actual_len={}",
-    len,
-    copy,
-    payload.len()
-  );
+  defmt::debug!("Parsed payload: requested={}, copied={}, actual_len={}", len, copy, payload.len());
   Some(Message {
     command: cmd,
     id,
