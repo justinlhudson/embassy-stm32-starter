@@ -37,6 +37,11 @@ pub mod common {
   pub use tasks::*;
 }
 
+// Convenience prelude for commonly used traits/types in binaries
+pub mod prelude {
+  pub use embedded_io::Write as _;
+}
+
 // Board configuration - included from root board.rs file (copied by setup.sh)
 #[path = "../board.rs"]
 pub mod board;

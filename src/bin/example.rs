@@ -5,6 +5,7 @@ use embassy_executor::Spawner;
 use embassy_stm32::Config;
 use embassy_stm32_starter::board::BoardConfig;
 use embassy_stm32_starter::common::tasks::*;
+use embassy_stm32_starter::prelude::*;
 use embassy_stm32_starter::*;
 use embassy_time::Timer;
 
@@ -29,15 +30,7 @@ async fn main(_spawner: Spawner) {
 
   let config = Config::default();
   let p = embassy_stm32::init(config);
-  let (led, button, _wdt, rtc, mut comm) = BoardConfig::init_all_hardware(_spawner, p);
-
-  use embedded_io::Write as _;
-  let _ = comm.write_all(b"Hello from Embassy USART2!\r\n");
-  let _ = comm.flush();
-
-  info!("Hardware setup complete; serial RX and HDLC tasks running");
-
-  info!("Spawning system tasks...");
+  let (led, button, mut wdt, rtc, mut comm) = BoardConfig::init_all_hardware(_spawner, p);
 
   _spawner
     .spawn(led_blink_custom(led, hardware::timers::TimingUtils::FAST_BLINK_MS))
@@ -45,7 +38,7 @@ async fn main(_spawner: Spawner) {
   _spawner.spawn(button_monitor(button)).ok();
   _spawner.spawn(rtc_clock_task(rtc)).ok();
 
-  info!("All tasks spawned, starting main loop");
+  info!("U ready? U an't ready!");
 
   loop {
     if let Some(msg) = embassy_stm32_starter::hardware::serial::read() {
@@ -81,7 +74,8 @@ async fn main(_spawner: Spawner) {
       }
     }
 
-    info!("Main loop - waiting (TODO: implement watchdog)");
-    Timer::after_millis(1000).await;
+    // Feed watchdog and sleep below the configured timeout (~1s)
+    wdt.pet();
+    Timer::after_millis(hardware::timers::TimingUtils::WATCHDOG_PET_MS).await;
   }
 }
