@@ -21,6 +21,7 @@ pub enum Command {
   Ack = 0x01,
   Nak = 0x02,
   Ping = 0x03,
+  Raw = 0x04,
 }
 
 impl From<Command> for u16 {
@@ -36,6 +37,7 @@ impl core::convert::TryFrom<u16> for Command {
       0x01 => Ok(Command::Ack),
       0x02 => Ok(Command::Nak),
       0x03 => Ok(Command::Ping),
+      0x04 => Ok(Command::Raw),
       _ => Err(()),
     }
   }
@@ -50,7 +52,7 @@ impl core::convert::TryFrom<u16> for Command {
 // - payload:      [u8; length]
 
 pub const COMMS_HEADER_LEN: usize = 9;
-pub const COMMS_MAX_PAYLOAD: usize = 128;
+pub const COMMS_MAX_PAYLOAD: usize = 256; // Max payload size in bytes
 
 #[derive(Clone, Debug)]
 pub struct Message {
