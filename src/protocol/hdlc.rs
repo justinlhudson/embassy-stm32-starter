@@ -1,17 +1,40 @@
 //! Minimal HDLC framing/deframing for serial communication
 // Uses the standard HDLC flag (0x7E) and escape (0x7D) bytes.
-// This is a simple, no-CRC, no-address implementation for embedded use.
+// Includes optional PPP/HDLC 16-bit FCS (CRC-16, poly 0x8408), compile-time toggle.
 
 pub const HDLC_FLAG: u8 = 0x7E;
 pub const HDLC_ESCAPE: u8 = 0x7D;
 pub const HDLC_XOR: u8 = 0x20;
 
-/// Frame a payload into an HDLC frame (adds flag, escapes as needed, appends 16-bit xsum)
+/// Compute PPP/HDLC 16-bit FCS.
+/// Polynomial 0x8408 (reversed 0x1021), init 0xFFFF, reflected, final XOR 0xFFFF.
+/// Returns the 16-bit FCS value to append (already complemented).
+#[cfg(feature = "hdlc_fcs")]
+fn fcs16_ppp(data: &[u8]) -> u16 {
+  let mut fcs: u16 = 0xFFFF;
+  for &b in data {
+    let mut x = (fcs ^ (b as u16)) & 0x00FF;
+    for _ in 0..8 {
+      if (x & 0x0001) != 0 {
+        x = (x >> 1) ^ 0x8408;
+      } else {
+        x >>= 1;
+      }
+    }
+    fcs = (fcs >> 8) ^ x;
+  }
+  !fcs
+}
+
+/// Frame a payload into an HDLC frame (adds flag, escapes as needed, appends 16-bit FCS)
 pub fn hdlc_frame(payload: &[u8], out: &mut heapless::Vec<u8, 128>) {
   out.clear();
   out.push(HDLC_FLAG).ok();
-  // Compute 16-bit checksum (sum of all bytes, little-endian)
-  let xsum = payload.iter().fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
+  // Compute FCS (PPP/HDLC) if enabled; otherwise 0
+  #[cfg(feature = "hdlc_fcs")]
+  let fcs = fcs16_ppp(payload);
+  #[cfg(not(feature = "hdlc_fcs"))]
+  let fcs: u16 = 0;
   // Write payload
   for &b in payload {
     match b {
@@ -24,8 +47,8 @@ pub fn hdlc_frame(payload: &[u8], out: &mut heapless::Vec<u8, 128>) {
       }
     }
   }
-  // Write checksum (little-endian, escaped)
-  for &b in &xsum.to_le_bytes() {
+  // Write FCS (little-endian, escaped)
+  for &b in &fcs.to_le_bytes() {
     match b {
       HDLC_FLAG | HDLC_ESCAPE => {
         out.push(HDLC_ESCAPE).ok();
@@ -39,7 +62,7 @@ pub fn hdlc_frame(payload: &[u8], out: &mut heapless::Vec<u8, 128>) {
   out.push(HDLC_FLAG).ok();
 }
 
-/// Deframe HDLC data (returns Some(payload) if a full frame with valid 16-bit xsum is found)
+/// Deframe HDLC data (returns Some(payload) if a full frame is found and FCS is valid when enabled)
 pub fn hdlc_deframe(buf: &mut heapless::Vec<u8, 128>, out: &mut heapless::Vec<u8, 128>) -> Option<()> {
   let mut in_frame = false;
   let mut escape = false;
@@ -70,19 +93,35 @@ pub fn hdlc_deframe(buf: &mut heapless::Vec<u8, 128>, out: &mut heapless::Vec<u8
           } else {
             buf.clear();
           }
-          // Split payload and checksum
+          // Split payload and FCS
           let payload_len = out.len() - 2;
-          let (payload, xsum_bytes) = out.split_at(payload_len);
-          let xsum_recv = u16::from_le_bytes([xsum_bytes[0], xsum_bytes[1]]);
-          let xsum_calc = payload.iter().fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
-          if xsum_recv == xsum_calc {
-            // Copy only payload to out
+          let (payload, fcs_bytes) = out.split_at(payload_len);
+          let fcs_recv = u16::from_le_bytes([fcs_bytes[0], fcs_bytes[1]]);
+
+          #[cfg(feature = "hdlc_fcs")]
+          {
+            let fcs_calc = fcs16_ppp(payload);
+            if fcs_recv == fcs_calc {
+              out.truncate(payload_len);
+              return Some(());
+            } else {
+              out.clear();
+              defmt::error!(
+                "HDLC FCS mismatch: recv={=u16}, calc={=u16}, len={}",
+                fcs_recv,
+                fcs_calc,
+                payload_len
+              );
+              return None;
+            }
+          }
+          #[cfg(not(feature = "hdlc_fcs"))]
+          {
+            let _ = payload; // suppress unused when FCS disabled
+            let _ = fcs_recv; // suppress unused when FCS disabled
+            // FCS disabled: accept frame without verification (strip trailing 2 bytes)
             out.truncate(payload_len);
             return Some(());
-          } else {
-            // Checksum mismatch, discard
-            out.clear();
-            return None;
           }
         }
         // else: empty frame, ignore

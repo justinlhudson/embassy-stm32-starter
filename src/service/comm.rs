@@ -1,4 +1,4 @@
-//! HDLC over serial: minimal API with read()/write() using CommsMsg.
+//! HDLC over serial: minimal API with read()/write() using Message.
 
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
@@ -52,29 +52,29 @@ pub const COMMS_HEADER_LEN: usize = 8;
 pub const COMMS_MAX_PAYLOAD: usize = 128;
 
 #[derive(Clone, Debug)]
-pub struct CommsMsg {
+pub struct Message {
   pub command: u16,
-  pub id: u8,
-  pub fragments: u16,
-  pub fragment: u16,
+  pub id: u8,         // todo: future use
+  pub fragments: u16, // todo: future use
+  pub fragment: u16,  // todo: future use
   pub length: u8,
   pub payload: CommsPayload,
 }
 
-impl Default for CommsMsg {
+impl Default for Message {
   fn default() -> Self {
     Self {
       command: 0,
       id: 0,
       fragments: 1,
-      fragment: 1,
+      fragment: 0,
       length: 0,
       payload: Vec::new(),
     }
   }
 }
 
-impl CommsMsg {
+impl Message {
   /// Convenience constructor with defaults (id=0, fragments=1, fragment=1).
   pub fn new<C: Into<u16>>(command: C, payload: &[u8]) -> Self {
     let mut buf: Vec<u8, COMMS_MAX_PAYLOAD> = Vec::new();
@@ -92,10 +92,10 @@ impl CommsMsg {
 }
 
 // Queue of parsed Comms messages
-static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, CommsMsg, 8> = Channel::new();
+static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, 8> = Channel::new();
 
-/// Encode a CommsMsg and send over HDLC
-pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &CommsMsg) {
+/// Encode a Message and send over HDLC
+pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
   // Build unframed message (header + payload)
   let mut buf: CommsFrameBuf = Vec::new();
   let len_usize = core::cmp::min(msg.payload.len(), COMMS_MAX_PAYLOAD);
@@ -134,7 +134,7 @@ pub async fn serial_hdlc_consumer_task() {
 }
 
 /// Read next parsed Comms message (non-blocking).
-pub fn read() -> Option<CommsMsg> {
+pub fn read() -> Option<Message> {
   COMMS_MSG_QUEUE.try_receive().ok()
 }
 
@@ -146,7 +146,7 @@ fn try_decode_hdlc(buf: &mut Vec<u8, 128>, out: &mut Vec<u8, 128>) -> bool {
 }
 
 /// Try to parse a Comms message from a byte slice (little-endian)
-fn try_parse_comms_frame(bytes: &[u8]) -> Option<CommsMsg> {
+fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
   if bytes.len() < COMMS_HEADER_LEN {
     return None;
   }
@@ -164,7 +164,7 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<CommsMsg> {
   payload
     .extend_from_slice(&bytes[COMMS_HEADER_LEN..COMMS_HEADER_LEN + copy])
     .ok()?;
-  Some(CommsMsg {
+  Some(Message {
     command: cmd,
     id,
     fragments: frags,
