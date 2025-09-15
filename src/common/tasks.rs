@@ -1,12 +1,60 @@
+#[cfg(not(feature = "no-rtc"))]
+use embassy_stm32::rtc::Rtc;
+#[cfg(not(feature = "no-rtc"))]
+/// RTC clock task - outputs current time to log
+#[embassy_executor::task]
+pub async fn rtc_clock(mut rtc: Rtc) {
+  // Set initial datetime
+  let initial_date = match NaiveDate::from_ymd_opt(2024, 1, 1) {
+    Some(date) => date,
+    None => {
+      defmt::error!("Failed to create initial RTC date");
+      return;
+    }
+  };
+  let initial_time = match initial_date.and_hms_opt(12, 0, 0) {
+    Some(dt) => dt,
+    None => {
+      defmt::error!("Failed to create initial RTC datetime");
+      return;
+    }
+  };
+  if let Err(e) = rtc.set_datetime(initial_time.into()) {
+    defmt::error!("Failed to set RTC datetime: {:?}", e);
+    return;
+  }
+  loop {
+    let now: NaiveDateTime = match rtc.now() {
+      Ok(val) => val.into(),
+      Err(e) => {
+        defmt::error!("RTC read error: {:?}", e);
+        TimingUtils::delay_ms(TimingUtils::RTC_UPDATE_INTERVAL_MS).await;
+        continue;
+      }
+    };
+    let timestamp = now.and_utc().timestamp();
+    info!(
+      "RTC: {}-{:02}-{:02} {:02}:{:02}:{:02} (ts: {})",
+      now.year(),
+      now.month(),
+      now.day(),
+      now.hour(),
+      now.minute(),
+      now.second(),
+      timestamp
+    );
+    TimingUtils::delay_ms(TimingUtils::RTC_UPDATE_INTERVAL_MS).await;
+  }
+}
 use crate::hardware::{ButtonReader, LedControl, TimingUtils};
 use crate::*;
+#[cfg(not(feature = "no-rtc"))]
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
 /// Task definitions and implementations
 ///
 /// This module contains reusable Embassy tasks that can be
 /// used across different binaries and applications.
 use embassy_stm32::gpio::{Input, Output};
-use embassy_stm32::rtc::Rtc;
 
 /// LED blinking task - configurable blink rate
 #[embassy_executor::task]
@@ -49,33 +97,21 @@ pub async fn heartbeat_task() {
   }
 }
 
-/// RTC clock display task
+use embassy_time::Instant;
+
+/// Timer-based clock task - outputs uptime to log
 #[embassy_executor::task]
-pub async fn rtc_clock(mut rtc: Rtc) {
-  // Set initial datetime
-  let initial_time = NaiveDate::from_ymd_opt(2024, 1, 1)
-    .unwrap()
-    .and_hms_opt(12, 0, 0)
-    .unwrap();
-
-  rtc
-    .set_datetime(initial_time.into())
-    .expect("Failed to set RTC datetime");
-
+pub async fn timer_clock_task() {
+  let mut last = Instant::now();
+  let mut seconds: u64 = 0;
   loop {
-    let now: NaiveDateTime = rtc.now().unwrap().into();
-    let timestamp = now.and_utc().timestamp();
-    info!(
-      "RTC: {}-{:02}-{:02} {:02}:{:02}:{:02} (ts: {})",
-      now.year(),
-      now.month(),
-      now.day(),
-      now.hour(),
-      now.minute(),
-      now.second(),
-      timestamp
-    );
-
+    let now = Instant::now();
+    let elapsed = now.duration_since(last).as_secs();
+    if elapsed > 0 {
+      seconds += elapsed;
+      last = now;
+      info!("Timer clock: {} seconds uptime", seconds);
+    }
     TimingUtils::delay_ms(TimingUtils::RTC_UPDATE_INTERVAL_MS).await;
   }
 }

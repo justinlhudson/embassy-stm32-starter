@@ -12,7 +12,7 @@ pub type CommsPayload = Vec<u8, COMMS_MAX_PAYLOAD>;
 pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=9 now
 
 /// Size for heapless Vecs used in comms framing/parsing
-pub const COMMS_VEC_SIZE: usize = 4096;
+pub const COMMS_VEC_SIZE: usize = 2048;
 /// Depth of the comms message queue
 pub const COMMS_QUEUE_DEPTH: usize = 3;
 
@@ -101,6 +101,8 @@ static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, COMMS_QUEUE_DE
 
 // Shared buffer for HDLC frame parsing/deframing
 static SHARED_BUF: Mutex<CriticalSectionRawMutex, Vec<u8, COMMS_VEC_SIZE>> = Mutex::new(Vec::new());
+// Shared output buffer for HDLC deframing (to avoid large stack allocation in async task)
+static SHARED_OUT_BUF: Mutex<CriticalSectionRawMutex, Vec<u8, COMMS_VEC_SIZE>> = Mutex::new(Vec::new());
 
 /// Encode a Message and send over HDLC
 pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
@@ -140,15 +142,17 @@ pub async fn serial_hdlc_consumer_task() {
     let buf = &mut *buf_guard;
     buf.clear();
     buf.extend_from_slice(&msg).ok();
-    // Use a local output buffer to avoid double mutable borrow
-    let mut out: Vec<u8, COMMS_VEC_SIZE> = Vec::new();
-    while try_decode_hdlc(buf, &mut out) {
-      if let Some(msg) = try_parse_comms_frame(&out) {
+    // Use a static output buffer protected by a mutex
+    let mut out_guard = SHARED_OUT_BUF.lock().await;
+    let out = &mut *out_guard;
+    out.clear();
+    while try_decode_hdlc(buf, out) {
+      if let Some(msg) = try_parse_comms_frame(out) {
         let _ = COMMS_MSG_QUEUE.try_send(msg);
       }
       // Prepare for next frame
       buf.clear();
-      buf.extend_from_slice(&out).ok();
+      buf.extend_from_slice(out).ok();
       out.clear();
     }
   }

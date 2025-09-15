@@ -1,3 +1,5 @@
+// Shared RX buffer for SerialReceiver (to avoid stack allocation in async task)
+use crate::hardware::timers::TimingUtils;
 use embassy_sync::mutex::Mutex;
 // Shared buffer for serial RX (mirrors comm.rs approach)
 static SERIAL_SHARED_BUF: Mutex<CriticalSectionRawMutex, Vec<u8, SERIAL_BUFFER_SIZE>> = Mutex::new(Vec::new());
@@ -9,16 +11,16 @@ use embassy_stm32::{
 };
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Duration, Timer};
+// ...existing code...
 use heapless::Vec;
 
 /// Serial RX buffer size (bytes)
 pub const SERIAL_BUFFER_SIZE: usize = 1024;
-pub const SERIAL_QUEUE_DEPTH: usize = 3;
+pub const SERIAL_QUEUE_DEPTH: usize = 4;
 
 // Bind USART2 interrupt handler for async operation
 bind_interrupts!(pub struct Irqs {
-    USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+  USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
 });
 
 // Also expose a binding for USART3 for boards that use it (e.g., Nucleo-144 F413ZH)
@@ -31,31 +33,34 @@ bind_interrupts!(pub struct IrqsUsart6 {
     USART6 => usart::InterruptHandler<embassy_stm32::peripherals::USART6>;
 });
 
+// Shared RX buffer for SerialReceiver (to avoid stack allocation in async task)
+static SERIAL_RX_BUF: Mutex<CriticalSectionRawMutex, [u8; SERIAL_BUFFER_SIZE]> = Mutex::new([0; SERIAL_BUFFER_SIZE]);
+
 // DMA-based serial receiver with idle interrupt detection
 pub struct SerialReceiver {
   uart_rx: UartRx<'static, Async>,
-  rx_buffer: [u8; SERIAL_BUFFER_SIZE],
   buffer_pos: usize,
 }
 
 impl SerialReceiver {
   pub fn new(uart_rx: UartRx<'static, Async>) -> Self {
-    Self {
-      uart_rx,
-      rx_buffer: [0; SERIAL_BUFFER_SIZE],
-      buffer_pos: 0,
-    }
+    Self { uart_rx, buffer_pos: 0 }
   }
+  // Shared RX buffer for SerialReceiver (to avoid stack allocation in async task)
 
   /// Read with idle detection - returns data when idle interrupt occurs
   /// This uses Embassy's built-in DMA with idle interrupt functionality
-  pub async fn read_until_idle(&mut self) -> Result<&[u8], embassy_stm32::usart::Error> {
-    // Use read_until_idle method from Embassy UART
-    // This automatically handles DMA transfer with idle interrupt
-    match self.uart_rx.read_until_idle(&mut self.rx_buffer).await {
+  pub async fn read_until_idle(&mut self) -> Result<heapless::Vec<u8, SERIAL_BUFFER_SIZE>, embassy_stm32::usart::Error> {
+    // Use a static RX buffer protected by a mutex
+    let mut buf_guard = SERIAL_RX_BUF.lock().await;
+    let rx_buffer = &mut *buf_guard;
+    match self.uart_rx.read_until_idle(rx_buffer).await {
       Ok(len) => {
         self.buffer_pos = len;
-        Ok(&self.rx_buffer[..len])
+        // Copy data out to an owned Vec
+        let mut out = heapless::Vec::<u8, SERIAL_BUFFER_SIZE>::new();
+        let _ = out.extend_from_slice(&rx_buffer[..len]);
+        Ok(out)
       }
       Err(e) => Err(e),
     }
@@ -63,12 +68,14 @@ impl SerialReceiver {
 
   /// Get current buffer contents
   pub fn get_buffer(&self) -> &[u8] {
-    &self.rx_buffer[..self.buffer_pos]
+    // Not used in async context; returns empty slice
+    &[]
   }
 
   /// Clear buffer
   pub fn clear_buffer(&mut self) {
     self.buffer_pos = 0;
+    // Optionally clear static buffer, but not strictly needed
   }
 }
 
@@ -97,7 +104,7 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
         serial_rx.clear_buffer();
       }
       Err(_e) => {
-        Timer::after(Duration::from_millis(10)).await;
+        TimingUtils::delay_ms(10).await;
       }
     }
   }
@@ -116,8 +123,6 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
 pub fn read() -> Option<Vec<u8, SERIAL_BUFFER_SIZE>> {
   SERIAL_RX_QUEUE.try_receive().ok()
 }
-
-/// Await raw serial bytes from the RX queue
 /// Returns a clone of the shared buffer contents (valid until next lock)
 pub async fn recv_raw() -> Vec<u8, SERIAL_BUFFER_SIZE> {
   SERIAL_RX_QUEUE.receive().await
@@ -148,7 +153,13 @@ where
   let mut cfg = UartConfig::default();
   cfg.baudrate = 115_200;
 
-  let uart = Uart::new(usart, rx, tx, irqs, tx_dma, rx_dma, cfg).unwrap();
+  let uart = match Uart::new(usart, rx, tx, irqs, tx_dma, rx_dma, cfg) {
+    Ok(u) => u,
+    Err(e) => {
+      defmt::error!("UART init failed: {:?}", e);
+      panic!("UART init failed");
+    }
+  };
   let (tx, rx) = uart.split();
   let receiver = create_serial_receiver(rx);
   let _ = spawner.spawn(serial_rx_task_dma(receiver));

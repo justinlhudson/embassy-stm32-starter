@@ -27,29 +27,40 @@ async fn main(_spawner: Spawner) {
 
   let config = Config::default();
   let p = embassy_stm32::init(config);
+  #[cfg(not(feature = "no-rtc"))]
   let (led, button, mut wdt, rtc, comm) = BoardConfig::init_all_hardware(_spawner, p);
+  #[cfg(feature = "no-rtc")]
+  let (led, button, mut wdt, comm) = BoardConfig::init_all_hardware(_spawner, p);
 
   _spawner.spawn(led_blink(led, hardware::timers::TimingUtils::FAST_BLINK_MS)).ok();
   _spawner.spawn(button_monitor(button)).ok();
+  #[cfg(not(feature = "no-rtc"))]
   _spawner.spawn(rtc_clock(rtc)).ok();
+  //_spawner.spawn(timer_clock_task()).ok();
   _spawner.spawn(comm_task(comm)).ok();
 
   info!("U ready? U an't ready!");
+
   let mut last_sp: u32 = 0;
-  // Set this to your RAM end address (from linker script or BoardConfig)
-  let ram_end: u32 = 0x20020000; // Example: 128KB RAM ends at 0x20020000
+  // Use board-specific RAM start and end address
+  let ram_start: u32 = BoardConfig::RAM_START;
+  let ram_end: u32 = BoardConfig::RAM_END;
   loop {
     wdt.pet(); // pet the watchdog from main loop
+
     // Print stack usage in KB only if changed
     let sp: u32;
     unsafe { core::arch::asm!("mov {}, sp", out(reg) sp) }
-    if sp > last_sp {
-      let stack_used = ram_end.saturating_sub(sp);
+    if sp < ram_end && sp > ram_start && sp != last_sp {
+      let stack_used = sp.saturating_sub(ram_start);
       let stack_used_kb = stack_used / 1024;
       info!("Stack used: {} KB (SP: {=u32:x})", stack_used_kb, sp);
       last_sp = sp;
     }
-    Timer::after_millis(hardware::timers::TimingUtils::WATCHDOG_PET_MS).await;
+
+    info!("WTF!!!!");
+    hardware::timers::TimingUtils::delay_ms(hardware::timers::TimingUtils::watchdog_pet_ms()).await;
+    info!("WTF!!!!");
   }
 }
 
@@ -76,7 +87,7 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
         );
       }
     } else {
-      Timer::after_millis(10).await; // backoff when no message is ready
+      hardware::timers::TimingUtils::delay_ms(10).await; // backoff when no message is ready
     }
   }
 }

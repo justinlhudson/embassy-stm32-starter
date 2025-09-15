@@ -6,7 +6,7 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 
 ## ✨ Features
 
-- 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64) and STM32F413ZH (Nucleo-144)
+- 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64), STM32F413ZH (Nucleo-144), and WWZMDiB STM32F103C8T6 Blue Pill
 - 🔄 **One-Command Setup**: Automatic board configuration with `./setup nucleo`
 - 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16
 - ⚡ **Async Tasks**: LED, button, RTC, and communication handling
@@ -17,10 +17,11 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 
 ### Supported Boards
 
-| Board          | MCU         | Flash  | RAM   | Serial | LED | Button |
-| -------------- | ----------- | ------ | ----- | ------ | --- | ------ |
-| **Nucleo-64**  | STM32F446RE | 512KB  | 128KB | USART2 | PA5 | PC13   |
-| **Nucleo-144** | STM32F413ZH | 1536KB | 320KB | USART3 | PB0 | PC13   |
+| Board          | MCU           | Flash  | RAM   | Serial | LED  | Button |
+| -------------- | ------------- | ------ | ----- | ------ | ---- | ------ |
+| **Nucleo-64**  | STM32F446RE   | 512KB  | 128KB | USART2 | PA5  | PC13   |
+| **Nucleo-144** | STM32F413ZH   | 1536KB | 320KB | USART3 | PB0  | PC13   |
+| **Blue Pill**  | STM32F103C8T6 | 64KB   | 20KB  | USART1 | PC13 | PA0    |
 
 ### Quick Setup
 
@@ -28,6 +29,7 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 # Configure for your board
 ./setup nucleo          # STM32F446RE (default)
 ./setup nucleo144       # STM32F413ZH
+./setup bluepill        # WWZMDiB STM32F103C8T6 Blue Pill
 
 # Build and run
 cargo run --bin example
@@ -51,10 +53,11 @@ The project uses a **template-based configuration system** that automatically ma
 
 ### Supported Boards
 
-| Board                 | MCU         | Flash  | RAM   | Serial           | LED         | Button |
-| --------------------- | ----------- | ------ | ----- | ---------------- | ----------- | ------ |
-| **Nucleo-64 F446RE**  | STM32F446RE | 512KB  | 128KB | USART2 (PA2/PA3) | PA5 (Green) | PC13   |
-| **Nucleo-144 F413ZH** | STM32F413ZH | 1536KB | 320KB | USART3 (PD8/PD9) | PB0 (Green) | PC13   |
+| Board                  | MCU           | Flash  | RAM   | Serial            | LED         | Button |
+| ---------------------- | ------------- | ------ | ----- | ----------------- | ----------- | ------ |
+| **Nucleo-64 F446RE**   | STM32F446RE   | 512KB  | 128KB | USART2 (PA2/PA3)  | PA5 (Green) | PC13   |
+| **Nucleo-144 F413ZH**  | STM32F413ZH   | 1536KB | 320KB | USART3 (PD8/PD9)  | PB0 (Green) | PC13   |
+| **Blue Pill F103C8T6** | STM32F103C8T6 | 64KB   | 20KB  | USART1 (PA9/PA10) | PC13        | PA0    |
 
 ### Automatic Configuration Management
 

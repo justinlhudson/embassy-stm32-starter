@@ -1,3 +1,6 @@
+    # Ensure feature lines have trailing commas for correct awk/sed matching
+    sed -i '' 's/"stm32f446"$/"stm32f446",/' Cargo.toml
+    sed -i '' 's/"stm32f413"$/"stm32f413",/' Cargo.toml
 #!/bin/bash
 
 # Board Configuration Setup Script
@@ -33,6 +36,7 @@ if [[ "$BOARD" == "help" || "$BOARD" == "-h" || "$BOARD" == "--help" ]]; then
     echo "Available boards:"
     echo "  nucleo        - STM32F446RE Nucleo board (default)"
     echo "  nucleo144     - STM32F413ZH Nucleo-144 board"
+    echo "  bluepill      - WWZMDiB STM32F103C8T6 Blue Pill"
     echo ""
     echo "Current memory.x points to: $(get_current_memory_target)"
     exit 0
@@ -49,6 +53,7 @@ case "$BOARD" in
         BOARD_CONFIG_FILE="nucleo_f446re.rs"
         STM32_HAL_FEATURE="stm32f446"
         STM32_EMBASSY_FEATURE="stm32f446re"
+    TARGET_MCU="thumbv7em-none-eabihf"
         ;;
     "nucleo144"|"nucleo-144"|"nucleo144-f413zh")
     BOARD_CONFIG="src/board/nucleo144_f413zh.rs"
@@ -59,6 +64,19 @@ case "$BOARD" in
         BOARD_CONFIG_FILE="nucleo144_f413zh.rs"
         STM32_HAL_FEATURE="stm32f413"
         STM32_EMBASSY_FEATURE="stm32f413zh"
+    TARGET_MCU="thumbv7em-none-eabihf"
+        ;;
+    "bluepill"|"stm32f103c8"|"stm32f103c8t6")
+    BOARD_CONFIG="src/board/bluepill_f103c8.rs"
+        BOARD_DESCRIPTION="WWZMDiB STM32F103C8T6 Blue Pill"
+        BOARD_NAME="WWZMDiB STM32F103C8T6 Blue Pill"
+        MCU_NAME="STM32F103C8T6"
+        CHIP_NAME="STM32F103C8T6"
+        BOARD_CONFIG_FILE="bluepill_f103c8.rs"
+        STM32_HAL_FEATURE="stm32f1"
+        STM32_EMBASSY_FEATURE="stm32f103c8"
+        TARGET_MCU="thumbv7m-none-eabi"
+        CARGO_FEATURES="--features no-rtc"
         ;;
     *)
         echo "❌ Unknown board: $BOARD"
@@ -83,6 +101,7 @@ substitute_template() {
         -e "s/{{BOARD_CONFIG_FILE}}/$BOARD_CONFIG_FILE/g" \
         -e "s/{{STM32_HAL_FEATURE}}/$STM32_HAL_FEATURE/g" \
         -e "s/{{STM32_EMBASSY_FEATURE}}/$STM32_EMBASSY_FEATURE/g" \
+        -e "s/{{TARGET_MCU}}/$TARGET_MCU/g" \
         "$template_file" > "$output_file"
     
     return 0
@@ -94,15 +113,38 @@ echo "🎯 Configuring for $BOARD_NAME ($MCU_NAME)"
 # Remove old config/memory files if they exist (cleanup)
 rm -f config/memory/stm32f413zh.x config/memory/stm32f446re.x
 
-# Copy memory.template.x and only uncomment the correct MEMORY block, never the board name
+# Copy memory.template.x and only uncomment the correct MEMORY block, comment out all others
 MEMORY_TEMPLATE="memory.template.x"
 MEMORY_FILE="memory.x"
 if [[ -f "$MEMORY_TEMPLATE" ]]; then
     cp "$MEMORY_TEMPLATE" "$MEMORY_FILE"
     if [[ "$BOARD" == "nucleo" || "$BOARD" == "nucleo-f446re" ]]; then
-        awk '/\/\* STM32F446RE \(Nucleo-64\) \*\// {print; inblock=1; next} /\/\* STM32F413ZH \(Nucleo-144\) \*\// {inblock=0} inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next} inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next} {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
+        awk '
+        /\/\* WWZMDiB STM32F103C8T6 Blue Pill \*\// {inblock=0}
+        /\/\* STM32F446RE \(Nucleo-64\) \*\// {print; inblock=1; next}
+        /\/\* STM32F413ZH \(Nucleo-144\) \*\// {inblock=0}
+        inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next}
+        inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next}
+        inblock {print; next}
+        {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
     elif [[ "$BOARD" == "nucleo144" || "$BOARD" == "nucleo-144" || "$BOARD" == "nucleo144-f413zh" ]]; then
-        awk '/\/\* STM32F413ZH \(Nucleo-144\) \*\// {print; inblock=1; next} /\/\* STM32F446RE \(Nucleo-64\) \*\// {inblock=0} inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next} inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next} {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
+        awk '
+        /\/\* WWZMDiB STM32F103C8T6 Blue Pill \*\// {inblock=0}
+        /\/\* STM32F413ZH \(Nucleo-144\) \*\// {print; inblock=1; next}
+        /\/\* STM32F446RE \(Nucleo-64\) \*\// {inblock=0}
+        inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next}
+        inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next}
+        inblock {print; next}
+        {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
+    elif [[ "$BOARD" == "bluepill" || "$BOARD" == "stm32f103c8" || "$BOARD" == "stm32f103c8t6" ]]; then
+        awk '
+        /\/\* WWZMDiB STM32F103C8T6 Blue Pill \*\// {print; inblock=1; next}
+        /\/\* STM32F446RE \(Nucleo-64\) \*\// {inblock=0}
+        /\/\* STM32F413ZH \(Nucleo-144\) \*\// {inblock=0}
+        inblock && /^\s*\/\*/ {sub(/^\s*\/\*/, ""); sub(/\*\/$/, ""); print; next}
+        inblock && /\*\// {sub(/\*\//, ""); print; inblock=0; next}
+        inblock {print; next}
+        {print}' "$MEMORY_FILE" > "$MEMORY_FILE.tmp" && mv "$MEMORY_FILE.tmp" "$MEMORY_FILE"
     fi
     echo "✅ Updated $MEMORY_FILE for $BOARD"
 else
@@ -118,13 +160,29 @@ else
     exit 1
 fi
 
+
 # Generate Cargo.toml from template
 if substitute_template "Cargo.template.toml" "Cargo.toml"; then
     echo "✅ Generated Cargo.toml from template"
+    # Uncomment the correct HAL dependency block for the selected board
+    if [[ "$BOARD" == "nucleo" || "$BOARD" == "nucleo-f446re" ]]; then
+        # Uncomment only stm32f446, keep stm32f413 commented
+        awk '/##__HAL_F4_START__/{f=1} /##__HAL_F4_END__/{f=0} f && /"stm32f446",/ {sub(/^# /, ""); print; next} f && /"stm32f413",/ {if ($0 !~ /^#/) print "#   \"stm32f413\","; else print; next} {print}' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+        sed -i '' '/##__HAL_F1_START__/,/##__HAL_F1_END__/s/^#/# /' Cargo.toml
+    elif [[ "$BOARD" == "nucleo144" || "$BOARD" == "nucleo-144" || "$BOARD" == "nucleo144-f413zh" ]]; then
+        # Uncomment only stm32f413, keep stm32f446 commented
+        awk '/##__HAL_F4_START__/{f=1} /##__HAL_F4_END__/{f=0} f && /"stm32f413",/ {sub(/^# /, ""); print; next} f && /"stm32f446",/ {if ($0 !~ /^#/) print "#   \"stm32f446\","; else print; next} {print}' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+        sed -i '' '/##__HAL_F1_START__/,/##__HAL_F1_END__/s/^#/# /' Cargo.toml
+    elif [[ "$BOARD" == "bluepill" || "$BOARD" == "stm32f103c8" || "$BOARD" == "stm32f103c8t6" ]]; then
+        # Uncomment F1 block, comment F4 block
+        sed -i '' '/##__HAL_F1_START__/,/##__HAL_F1_END__/s/^# //' Cargo.toml
+        sed -i '' '/##__HAL_F4_START__/,/##__HAL_F4_END__/s/^#/# /' Cargo.toml
+    fi
 else
     echo "❌ Failed to generate Cargo.toml from template"
     exit 1
 fi
+
 
 # Generate .cargo/config.toml from template
 mkdir -p .cargo
@@ -133,6 +191,13 @@ if substitute_template ".cargo/config.template.toml" ".cargo/config.toml"; then
 else
     echo "❌ Failed to generate .cargo/config.toml from template"
     exit 1
+fi
+
+# Print cargo build/run instructions with features if needed
+if [[ -n "$CARGO_FEATURES" ]]; then
+    echo "🔔 For Blue Pill, use: cargo build $CARGO_FEATURES or cargo run $CARGO_FEATURES"
+else
+    echo "🔔 For Nucleo boards, use: cargo build or cargo run"
 fi
 
 # Always copy the launch template before replacing the chip field

@@ -24,7 +24,17 @@ defmt = ">=1.0.1"
 defmt-rtt = ">=1.0.0"
 panic-probe = { version = ">=1.0.0", features = ["print-defmt"] }
 chrono = { version = ">=0.4.41", default-features = false }
-stm32f4xx-hal = { version = "0.22.1", features = ["{{STM32_HAL_FEATURE}}"] }
+##__HAL_F4_START__
+# stm32f4xx-hal = { version = ">=0.22.1", features = [
+#   "stm32f446"
+#   "stm32f413"
+# ]}
+##__HAL_F4_END__
+##__HAL_F1_START__
+# stm32f1xx-hal = { version = ">=0.11.0", features = [
+#   "stm32f103",
+# ]}
+##__HAL_F1_END__
 embassy-stm32 = { version = ">=0.4.0", features = [
   "defmt",
   "{{STM32_EMBASSY_FEATURE}}",
@@ -61,6 +71,7 @@ harness = false
 semihosting = ">=0.1.20" # for tests only
 
 [features]
+
 # Feature flags for this crate. No features enabled by default.
 #
 # How to enable FCS at build/run time:
@@ -72,8 +83,12 @@ semihosting = ">=0.1.20" # for tests only
 # Behavior:
 #   - hdlc_fcs OFF (default): frames include a 2-byte trailer but it is not verified.
 #   - hdlc_fcs ON: PPP/HDLC 16-bit FCS (CRC-16, poly 0x8408) is appended and verified.
+#
+# RTC support:
+#   - no-rtc: disables RTC code for boards that do not support it (e.g., Blue Pill)
 default = []
 hdlc_fcs = []
+no-rtc = []
 
 [profile.dev]
 opt-level = 0     # no optimizations

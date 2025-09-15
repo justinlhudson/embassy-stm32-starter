@@ -1,5 +1,11 @@
-# config.toml template for MCU configuration
+## config.toml template for MCU configuration
 # Managed by setup script
+#
+# Supported boards:
+#   - STM32F446RE Nucleo-64
+#   - STM32F413ZH Nucleo-144
+#   - WWZMDiB STM32F103C8T6 Blue Pill
+
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 linker = "arm-none-eabi-gcc"
@@ -7,7 +13,7 @@ runner = [
   "probe-rs",
   "run",
   "--chip",
-  "{{CHIP_NAME}}",
+  "{{CHIP_NAME}}",        # e.g. STM32F446RE, STM32F413ZH, STM32F103C8T6
   "--catch-hardfault",
   "--catch-reset",
   "--rtt-scan-memory",
@@ -28,8 +34,12 @@ rustflags = [
 [env]
 DEFMT_LOG = "trace"
 
+
+# Target triple is set by setup script for each board:
+#   - thumbv7em-none-eabihf (F4/F413)
+#   - thumbv7m-none-eabi    (F103/Blue Pill)
 [build]
-target = "thumbv7em-none-eabihf"
+target = "{{TARGET_MCU}}"
 
 [alias]
 cb = "clean"
