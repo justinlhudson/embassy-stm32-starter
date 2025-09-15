@@ -1,6 +1,3 @@
-use embassy_sync::mutex::Mutex;
-// Shared buffer for serial RX (mirrors comm.rs approach)
-static SERIAL_SHARED_BUF: Mutex<CriticalSectionRawMutex, Vec<u8, SERIAL_BUFFER_SIZE>> = Mutex::new(Vec::new());
 use embassy_executor::Spawner;
 use embassy_stm32::{
   Peri, bind_interrupts,
@@ -11,10 +8,6 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
-
-/// Serial RX buffer size (bytes)
-pub const SERIAL_BUFFER_SIZE: usize = 1024;
-pub const SERIAL_QUEUE_DEPTH: usize = 3;
 
 // Bind USART2 interrupt handler for async operation
 bind_interrupts!(pub struct Irqs {
@@ -34,7 +27,7 @@ bind_interrupts!(pub struct IrqsUsart6 {
 // DMA-based serial receiver with idle interrupt detection
 pub struct SerialReceiver {
   uart_rx: UartRx<'static, Async>,
-  rx_buffer: [u8; SERIAL_BUFFER_SIZE],
+  rx_buffer: [u8; 256],
   buffer_pos: usize,
 }
 
@@ -42,7 +35,7 @@ impl SerialReceiver {
   pub fn new(uart_rx: UartRx<'static, Async>) -> Self {
     Self {
       uart_rx,
-      rx_buffer: [0; SERIAL_BUFFER_SIZE],
+      rx_buffer: [0; 256],
       buffer_pos: 0,
     }
   }
@@ -86,17 +79,17 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
     match serial_rx.read_until_idle().await {
       Ok(data) => {
         if !data.is_empty() {
-          // Use the shared buffer for RX
-          let mut buf_guard = SERIAL_SHARED_BUF.lock().await;
-          let buf = &mut *buf_guard;
-          buf.clear();
-          let take = core::cmp::min(buf.capacity(), data.len());
-          buf.extend_from_slice(&data[..take]).ok();
-          let _ = SERIAL_RX_QUEUE.try_send(buf.clone());
+          // Copy bytes into a bounded buffer and queue
+          let mut bytes: Vec<u8, 256> = Vec::new();
+          let take = core::cmp::min(bytes.capacity(), data.len());
+          bytes.extend_from_slice(&data[..take]).ok();
+          let _ = SERIAL_RX_QUEUE.try_send(bytes);
         }
         serial_rx.clear_buffer();
       }
       Err(_e) => {
+        // Handle error - could log with defmt if needed
+        // For now, just wait a bit and try again
         Timer::after(Duration::from_millis(10)).await;
       }
     }
@@ -104,7 +97,7 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
 }
 
 // Global queue for raw serial bytes
-static SERIAL_RX_QUEUE: Channel<CriticalSectionRawMutex, Vec<u8, SERIAL_BUFFER_SIZE>, SERIAL_QUEUE_DEPTH> = Channel::new();
+static SERIAL_RX_QUEUE: Channel<CriticalSectionRawMutex, Vec<u8, 256>, 8> = Channel::new();
 /// Blocking write function for serial output
 pub fn write<W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
   let _ = serial.write_all(data);
@@ -112,14 +105,12 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
 }
 
 /// Try to read raw serial bytes (non-blocking)
-/// Returns a clone of the shared buffer contents (valid until next lock)
-pub fn read() -> Option<Vec<u8, SERIAL_BUFFER_SIZE>> {
+pub fn read() -> Option<Vec<u8, 256>> {
   SERIAL_RX_QUEUE.try_receive().ok()
 }
 
 /// Await raw serial bytes from the RX queue
-/// Returns a clone of the shared buffer contents (valid until next lock)
-pub async fn recv_raw() -> Vec<u8, SERIAL_BUFFER_SIZE> {
+pub async fn recv_raw() -> Vec<u8, 256> {
   SERIAL_RX_QUEUE.receive().await
 }
 

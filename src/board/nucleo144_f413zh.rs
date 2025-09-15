@@ -43,6 +43,16 @@ impl InterruptHandlers for BoardConfig {
 }
 
 impl BoardConfig {
+  /// Busy-wait loop cycles per ms for delays (used by timers.rs)
+  pub const fn cycles_per_ms() -> u32 {
+    0 // Not used (async timer available)
+  }
+  /// Start address of RAM (for stack usage reporting)
+  pub const RAM_START: u32 = 0x20000000;
+  /// Watchdog timeout in microseconds
+  pub const WATCHDOG_TIMEOUT_US: u32 = 1_000_000;
+  /// End address of RAM (for stack usage reporting)
+  pub const RAM_END: u32 = 0x20050000; // 320KB RAM ends at 0x20050000
   // Board constants (mirroring F446RE style)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-144 F413ZH";
   pub const MCU_NAME: &'static str = "STM32F413ZH";
@@ -84,7 +94,7 @@ impl BoardConfig {
     let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
 
     // Watchdog and RTC
-    let mut wdt = IndependentWatchdog::new(p.IWDG, 1_000_000);
+    let mut wdt = IndependentWatchdog::new(p.IWDG, Self::WATCHDOG_TIMEOUT_US);
     let rtc = Rtc::new(p.RTC, RtcConfig::default());
     wdt.unleash();
 

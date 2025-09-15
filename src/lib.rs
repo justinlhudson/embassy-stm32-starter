@@ -59,3 +59,5 @@ macro_rules! validate_board_config {
     };
   };
 }
+
+pub mod hardfault;
