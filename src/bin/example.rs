@@ -68,6 +68,24 @@ async fn main(_spawner: Spawner) {
 async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>) {
   loop {
     if let Some(msg) = embassy_stm32_starter::service::comm::read() {
+      // Defensive checks for message validity
+      if msg.payload.len() > embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD {
+        defmt::error!(
+          "Received message with payload length {} exceeding COMMS_MAX_PAYLOAD {}! Skipping.",
+          msg.payload.len(),
+          embassy_stm32_starter::service::comm::COMMS_MAX_PAYLOAD
+        );
+        continue;
+      }
+      if msg.length as usize != msg.payload.len() {
+        defmt::error!("Message length field ({}) does not match payload length ({}). Skipping.", msg.length, msg.payload.len());
+        continue;
+      }
+      // Optionally, check for valid command
+      if embassy_stm32_starter::service::comm::Command::try_from(msg.command).is_err() {
+        defmt::error!("Unknown command value {} in received message. Skipping.", msg.command);
+        continue;
+      }
       info!(
         "message (rx): command={}, {}/{} bytes",
         msg.command,
