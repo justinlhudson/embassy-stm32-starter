@@ -9,6 +9,12 @@ use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
 
+// Define a constant for buffer size
+const SERIAL_BUFFER_SIZE: usize = 256;
+
+// Define a constant for queue depth
+const SERIAL_QUEUE_DEPTH: usize = 4;
+
 // Bind USART2 interrupt handler for async operation
 bind_interrupts!(pub struct Irqs {
     USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
@@ -27,7 +33,7 @@ bind_interrupts!(pub struct IrqsUsart6 {
 // DMA-based serial receiver with idle interrupt detection
 pub struct SerialReceiver {
   uart_rx: UartRx<'static, Async>,
-  rx_buffer: [u8; 256],
+  rx_buffer: [u8; SERIAL_BUFFER_SIZE],
   buffer_pos: usize,
 }
 
@@ -35,7 +41,7 @@ impl SerialReceiver {
   pub fn new(uart_rx: UartRx<'static, Async>) -> Self {
     Self {
       uart_rx,
-      rx_buffer: [0; 256],
+      rx_buffer: [0; SERIAL_BUFFER_SIZE],
       buffer_pos: 0,
     }
   }
@@ -80,7 +86,7 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
       Ok(data) => {
         if !data.is_empty() {
           // Copy bytes into a bounded buffer and queue
-          let mut bytes: Vec<u8, 256> = Vec::new();
+          let mut bytes: Vec<u8, SERIAL_BUFFER_SIZE> = Vec::new();
           let take = core::cmp::min(bytes.capacity(), data.len());
           bytes.extend_from_slice(&data[..take]).ok();
           let _ = SERIAL_RX_QUEUE.try_send(bytes);
@@ -97,7 +103,7 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
 }
 
 // Global queue for raw serial bytes
-static SERIAL_RX_QUEUE: Channel<CriticalSectionRawMutex, Vec<u8, 256>, 8> = Channel::new();
+static SERIAL_RX_QUEUE: Channel<CriticalSectionRawMutex, Vec<u8, SERIAL_BUFFER_SIZE>, SERIAL_QUEUE_DEPTH> = Channel::new();
 /// Blocking write function for serial output
 pub fn write<W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
   let _ = serial.write_all(data);
@@ -105,12 +111,12 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, data: &[u8]) {
 }
 
 /// Try to read raw serial bytes (non-blocking)
-pub fn read() -> Option<Vec<u8, 256>> {
+pub fn read() -> Option<Vec<u8, SERIAL_BUFFER_SIZE>> {
   SERIAL_RX_QUEUE.try_receive().ok()
 }
 
 /// Await raw serial bytes from the RX queue
-pub async fn recv_raw() -> Vec<u8, 256> {
+pub async fn recv_raw() -> Vec<u8, SERIAL_BUFFER_SIZE> {
   SERIAL_RX_QUEUE.receive().await
 }
 

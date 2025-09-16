@@ -5,10 +5,14 @@ use heapless::Vec;
 use crate::hardware::serial;
 use crate::protocol::hdlc;
 
+// Define constants for queue depth and byte vector sizes
+const COMMS_BYTE_VEC_SIZE: usize = 1024;
+const COMMS_QUEUE_DEPTH: usize = 3;
+
 // Byte vector aliases used throughout this module
 // Allow room for larger inbound/outbound frames (escaping can ~double size)
-pub type ByteVec = Vec<u8, 300>;
-pub type FramedBuf = Vec<u8, 300>;
+pub type ByteVec = Vec<u8, COMMS_BYTE_VEC_SIZE>;
+pub type FramedBuf = Vec<u8, COMMS_BYTE_VEC_SIZE>;
 pub type CommsPayload = Vec<u8, COMMS_MAX_PAYLOAD>;
 pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=9 now
 
@@ -93,7 +97,7 @@ impl Message {
 }
 
 // Queue of parsed Comms messages
-static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, 8> = Channel::new();
+static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, COMMS_QUEUE_DEPTH> = Channel::new();
 
 /// Encode a Message and send over HDLC
 pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
@@ -102,12 +106,7 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
   let len_usize = core::cmp::min(msg.payload.len(), COMMS_MAX_PAYLOAD);
   let len: u16 = len_usize as u16; // Use actual payload length, not msg.length field
 
-  defmt::debug!(
-    "Encoding: payload.len()={}, len_field={}, len_usize={}",
-    msg.payload.len(),
-    msg.length,
-    len_usize
-  );
+  defmt::debug!("Encoding: payload.len()={}, len_field={}, len_usize={}", msg.payload.len(), msg.length, len_usize);
   defmt::debug!("Message payload hex: {:02x}", &msg.payload[..]);
 
   buf.extend_from_slice(&msg.command.to_le_bytes()).ok();
@@ -116,18 +115,10 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
   buf.extend_from_slice(&msg.fragment.to_le_bytes()).ok();
   buf.extend_from_slice(&len.to_le_bytes()).ok();
 
-  defmt::debug!(
-    "Header encoded: {} bytes, about to add {} payload bytes",
-    buf.len(),
-    len_usize
-  );
+  defmt::debug!("Header encoded: {} bytes, about to add {} payload bytes", buf.len(), len_usize);
   buf.extend_from_slice(&msg.payload[..len_usize]).ok();
 
-  defmt::debug!(
-    "Final buffer: {} bytes, hex: {:02x}",
-    buf.len(),
-    &buf[..core::cmp::min(16, buf.len())]
-  );
+  defmt::debug!("Final buffer: {} bytes, hex: {:02x}", buf.len(), &buf[..core::cmp::min(16, buf.len())]);
   defmt::debug!("Encoded frame size: {} (header + {} payload)", buf.len(), len_usize);
 
   // HDLC-frame and write
@@ -218,24 +209,13 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
   defmt::debug!("Payload parsing: start_offset={}, copy={} bytes", payload_start, copy);
 
   if bytes.len() >= payload_start + copy {
-    payload
-      .extend_from_slice(&bytes[payload_start..payload_start + copy])
-      .ok()?;
+    payload.extend_from_slice(&bytes[payload_start..payload_start + copy]).ok()?;
   } else {
-    defmt::warn!(
-      "Not enough bytes for payload: need {}, have {}",
-      payload_start + copy,
-      bytes.len()
-    );
+    defmt::warn!("Not enough bytes for payload: need {}, have {}", payload_start + copy, bytes.len());
     return None;
   }
 
-  defmt::debug!(
-    "Parsed payload: requested={}, copied={}, actual_len={}",
-    len,
-    copy,
-    payload.len()
-  );
+  defmt::debug!("Parsed payload: requested={}, copied={}, actual_len={}", len, copy, payload.len());
   Some(Message {
     command: cmd,
     id,
