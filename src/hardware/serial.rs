@@ -12,9 +12,7 @@ use heapless::Vec;
 
 // Define a constant for buffer size
 const SERIAL_BUFFER_SIZE: usize = 256;
-
-// Define a constant for queue depth
-const SERIAL_QUEUE_DEPTH: usize = 6;
+const SERIAL_QUEUE_DEPTH: usize = 4;
 
 // Bind USART2 interrupt handler for async operation
 bind_interrupts!(pub struct Irqs {

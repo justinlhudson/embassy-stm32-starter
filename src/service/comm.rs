@@ -6,8 +6,9 @@ use crate::hardware::serial;
 use crate::protocol::hdlc;
 
 // Define constants for queue depth and byte vector sizes
-const COMMS_BYTE_VEC_SIZE: usize = 1024;
+const COMMS_BYTE_VEC_SIZE: usize = 512;
 const COMMS_QUEUE_DEPTH: usize = 3;
+pub const COMMS_MAX_PAYLOAD: usize = 256; // half to account for escaping
 
 // Byte vector aliases used throughout this module
 // Allow room for larger inbound/outbound frames (escaping can ~double size)
@@ -54,7 +55,6 @@ impl core::convert::TryFrom<u16> for Command {
 // - payload:      [u8; length]
 
 pub const COMMS_HEADER_LEN: usize = 9;
-pub const COMMS_MAX_PAYLOAD: usize = 256; // Max payload size in bytes
 
 #[derive(Clone, Debug)]
 pub struct Message {
