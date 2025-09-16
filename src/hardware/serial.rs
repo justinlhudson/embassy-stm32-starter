@@ -6,6 +6,7 @@ use embassy_stm32::{
 };
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
 
@@ -13,7 +14,7 @@ use heapless::Vec;
 const SERIAL_BUFFER_SIZE: usize = 256;
 
 // Define a constant for queue depth
-const SERIAL_QUEUE_DEPTH: usize = 4;
+const SERIAL_QUEUE_DEPTH: usize = 6;
 
 // Bind USART2 interrupt handler for async operation
 bind_interrupts!(pub struct Irqs {
@@ -31,56 +32,62 @@ bind_interrupts!(pub struct IrqsUsart6 {
 });
 
 // DMA-based serial receiver with idle interrupt detection
-pub struct SerialReceiver {
+pub struct SerialReceiver<'a> {
   uart_rx: UartRx<'static, Async>,
-  rx_buffer: [u8; SERIAL_BUFFER_SIZE],
+  rx_buffer: &'a Mutex<CriticalSectionRawMutex, [u8; SERIAL_BUFFER_SIZE]>,
   buffer_pos: usize,
 }
 
-impl SerialReceiver {
-  pub fn new(uart_rx: UartRx<'static, Async>) -> Self {
+impl<'a> SerialReceiver<'a> {
+  pub fn new(uart_rx: UartRx<'static, Async>, rx_buffer: &'a Mutex<CriticalSectionRawMutex, [u8; SERIAL_BUFFER_SIZE]>) -> Self {
     Self {
       uart_rx,
-      rx_buffer: [0; SERIAL_BUFFER_SIZE],
+      rx_buffer,
       buffer_pos: 0,
     }
   }
 
   /// Read with idle detection - returns data when idle interrupt occurs
   /// This uses Embassy's built-in DMA with idle interrupt functionality
-  pub async fn read_until_idle(&mut self) -> Result<&[u8], embassy_stm32::usart::Error> {
-    // Use read_until_idle method from Embassy UART
-    // This automatically handles DMA transfer with idle interrupt
-    match self.uart_rx.read_until_idle(&mut self.rx_buffer).await {
+  pub async fn read_until_idle(&mut self) -> Result<Vec<u8, SERIAL_BUFFER_SIZE>, embassy_stm32::usart::Error> {
+    let mut buffer = self.rx_buffer.lock().await;
+    match self.uart_rx.read_until_idle(&mut *buffer).await {
       Ok(len) => {
         self.buffer_pos = len;
-        Ok(&self.rx_buffer[..len])
+        let mut result = Vec::new();
+        result.extend_from_slice(&buffer[..len]).ok();
+        Ok(result)
       }
       Err(e) => Err(e),
     }
   }
 
   /// Get current buffer contents
-  pub fn get_buffer(&self) -> &[u8] {
-    &self.rx_buffer[..self.buffer_pos]
+  pub async fn get_buffer(&self) -> Vec<u8, SERIAL_BUFFER_SIZE> {
+    let buffer = self.rx_buffer.lock().await;
+    let mut result = Vec::new();
+    result.extend_from_slice(&buffer[..self.buffer_pos]).ok();
+    result
   }
 
   /// Clear buffer
-  pub fn clear_buffer(&mut self) {
+  pub async fn clear_buffer(&mut self) {
+    let mut buffer = self.rx_buffer.lock().await;
+    buffer.fill(0);
     self.buffer_pos = 0;
   }
 }
 
 /// Create a SerialReceiver from a UartRx
 /// This should be called after you've created a UART instance and split it
-pub fn create_serial_receiver(uart_rx: UartRx<'static, Async>) -> SerialReceiver {
-  SerialReceiver::new(uart_rx)
+pub fn create_serial_receiver(uart_rx: UartRx<'static, Async>) -> SerialReceiver<'static> {
+  SerialReceiver::new(uart_rx, &SHARED_RX_BUFFER)
 }
 
 /// Async task: read from UART using DMA with idle interrupt
 /// This task uses Embassy's built-in DMA and idle interrupt functionality
 #[embassy_executor::task]
-pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
+pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver<'static>) {
   loop {
     match serial_rx.read_until_idle().await {
       Ok(data) => {
@@ -91,7 +98,7 @@ pub async fn serial_rx_task_dma(mut serial_rx: SerialReceiver) {
           bytes.extend_from_slice(&data[..take]).ok();
           let _ = SERIAL_RX_QUEUE.try_send(bytes);
         }
-        serial_rx.clear_buffer();
+        serial_rx.clear_buffer().await;
       }
       Err(_e) => {
         // Handle error - could log with defmt if needed
@@ -152,3 +159,6 @@ where
   let _ = spawner.spawn(crate::service::comm::serial_hdlc_consumer_task());
   tx
 }
+
+// Define a shared buffer to reduce RAM usage
+static SHARED_RX_BUFFER: Mutex<CriticalSectionRawMutex, [u8; SERIAL_BUFFER_SIZE]> = Mutex::new([0; SERIAL_BUFFER_SIZE]);
