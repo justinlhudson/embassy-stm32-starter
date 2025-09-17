@@ -37,25 +37,14 @@ pub async fn button_monitor(button: Input<'static>) {
   }
 }
 
-/// System heartbeat task
-#[embassy_executor::task]
-pub async fn heartbeat_task() {
-  let mut counter = 0;
-  loop {
-    counter += 1;
-    info!("Heartbeat #{}", counter);
-    Timing::delay_ms(Timing::HEARTBEAT_INTERVAL_MS).await;
-  }
-}
-
 /// RTC clock display task
 #[embassy_executor::task]
 pub async fn rtc_clock(_rtc: Rtc) {
   let mut seconds: u64 = 0;
   loop {
     seconds = seconds.wrapping_add(1);
-    if seconds % 10 == 0 {
-      debug!("RTC seconds: {}", seconds);
+    if seconds % 60 == 0 {
+      debug!("RTC minutes: {}", seconds / 60);
     }
     Timing::delay_ms(Timing::RTC_UPDATE_INTERVAL_MS).await;
   }

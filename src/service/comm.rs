@@ -146,11 +146,21 @@ pub async fn serial_hdlc_consumer_task() {
     }
 
     // Try to decode HDLC frame(s)
+    let mut had_fcs_error = false;
     while try_decode_hdlc(&mut rx_buf, &mut decoded) {
       // Try to parse as a Comms frame and publish
       if let Some(msg) = try_parse_comms_frame(&decoded) {
         let _ = COMMS_MSG_QUEUE.try_send(msg);
       }
+      // If the last FCS error count increased, set flag
+      if fcs_error_count() > 0 {
+        had_fcs_error = true;
+      }
+    }
+    // If an FCS error occurred, clear the RX buffer to resync
+    if had_fcs_error {
+      defmt::warn!("Clearing RX buffer due to FCS error (frame resync)");
+      rx_buf.clear();
     }
   }
 }

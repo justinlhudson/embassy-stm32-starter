@@ -37,9 +37,6 @@ pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>
   #[cfg(not(feature = "hdlc_fcs"))]
   let fcs: u16 = 0;
 
-  #[cfg(feature = "hdlc_fcs")]
-  defmt::info!("HDLC frame: payload len={}, FCS={=u16:x}", payload.len(), fcs);
-
   // Write payload
   for &b in payload {
     match b {
@@ -112,7 +109,6 @@ pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, 
           #[cfg(feature = "hdlc_fcs")]
           {
             let fcs_calc = fcs16_ppp(payload);
-            defmt::info!("HDLC deframe: payload len={}, FCS recv={=u16:x}, FCS calc={=u16:x}", payload_len, fcs_recv, fcs_calc);
             if fcs_recv == fcs_calc {
               out.truncate(payload_len);
               return Ok(());

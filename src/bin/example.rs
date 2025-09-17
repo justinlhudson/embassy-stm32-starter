@@ -61,12 +61,8 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
     match embassy_stm32_starter::service::comm::read() {
       Some(msg) => {
         led.set_high(); // Turn on the LED when a message is received
-
-        debug!("Received message: command=0x{:04x}, id={}, len={}", msg.command, msg.id, msg.length);
-
         // *** Handle command(s) here *** //
         if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
-          debug!("Sending Ping response");
           let mut tx_ref = &mut tx;
           embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
         }
