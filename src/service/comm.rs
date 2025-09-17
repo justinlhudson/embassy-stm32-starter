@@ -4,6 +4,14 @@ use heapless::Vec;
 
 use crate::hardware::serial;
 use crate::protocol::hdlc;
+use core::sync::atomic::{AtomicU8, Ordering};
+// FCS error counter
+static FCS_ERROR_COUNT: AtomicU8 = AtomicU8::new(0);
+
+/// Get the current FCS error count
+pub fn fcs_error_count() -> u8 {
+  FCS_ERROR_COUNT.load(Ordering::Relaxed)
+}
 
 // Define constants for queue depth and byte vector sizes
 const COMMS_BYTE_VEC_SIZE: usize = 512;
@@ -156,7 +164,17 @@ pub fn read() -> Option<Message> {
 
 /// Try to decode an HDLC frame from a buffer of received serial data
 fn try_decode_hdlc(buf: &mut ByteVec, out: &mut ByteVec) -> bool {
-  hdlc::hdlc_deframe(buf, out).is_some()
+  match hdlc::hdlc_deframe(buf, out) {
+    Ok(()) => true,
+    Err(hdlc::HdlcError::FcsMismatch { received, calculated, len }) => {
+      // Suppress warning for empty/incomplete frames (all zero)
+      if received != 0 || calculated != 0 || len != 0 {
+        FCS_ERROR_COUNT.fetch_add(1, Ordering::Relaxed);
+        defmt::warn!("HDLC FCS error: recv={=u16}, calc={=u16}, len={}", received, calculated, len);
+      }
+      false
+    }
+  }
 }
 
 /// Try to parse a Comms message from a byte slice (little-endian)

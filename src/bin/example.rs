@@ -55,18 +55,32 @@ async fn main(_spawner: Spawner) {
 
 #[embassy_executor::task]
 async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>, mut led: embassy_stm32::gpio::Output<'static>) {
+  let mut last_fcs_error_count = 0u8;
   loop {
-    if let Some(msg) = embassy_stm32_starter::service::comm::read() {
-      led.set_high(); // Turn on the LED when a message is received
+    // Try to read a message; if FCS error occurred, log it
+    match embassy_stm32_starter::service::comm::read() {
+      Some(msg) => {
+        led.set_high(); // Turn on the LED when a message is received
 
-      // *** Handle command(s) here *** //
-      if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
-        let mut tx_ref = &mut tx;
-        embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
+        debug!("Received message: command=0x{:04x}, id={}, len={}", msg.command, msg.id, msg.length);
+
+        // *** Handle command(s) here *** //
+        if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
+          debug!("Sending Ping response");
+          let mut tx_ref = &mut tx;
+          embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
+        }
       }
-    } else {
-      led.set_low(); // Turn off the LED when no message is received
-      Timer::after_millis(1).await; // backoff when no message is ready
+      None => {
+        // Could be no message, or FCS error (already logged in comm.rs)
+        led.set_low(); // Turn off the LED when no message is received
+        let fcs_errors = embassy_stm32_starter::service::comm::fcs_error_count();
+        if fcs_errors != last_fcs_error_count {
+          debug!("HDLC FCS error count: {}", fcs_errors);
+          last_fcs_error_count = fcs_errors;
+        }
+        Timer::after_millis(1).await; // backoff when no message is ready
+      }
     }
   }
 }

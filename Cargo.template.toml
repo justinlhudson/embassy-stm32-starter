@@ -62,18 +62,8 @@ harness = false
 semihosting = ">=0.1.20" # for tests only
 
 [features]
-# Feature flags for this crate. No features enabled by default.
-#
-# How to enable FCS at build/run time:
-#   - Locally: `cargo build --features hdlc_fcs` or `cargo run --features hdlc_fcs`
-#   - In another crate's Cargo.toml:
-#       embassy-stm32-starter = { version = "*", features = ["hdlc_fcs"] }
-#   - To make it the default for this crate, set: `default = ["hdlc_fcs"]`
-#
-# Behavior:
-#   - hdlc_fcs OFF (default): frames include a 2-byte trailer but it is not verified.
-#   - hdlc_fcs ON: PPP/HDLC 16-bit FCS (CRC-16, poly 0x8408) is appended and verified.
-default = []
+default = ["hdlc_fcs"] # include HDLC FCS by default
+# default = []           # if you don't want HDLC FCS by default
 hdlc_fcs = []
 
 [profile.dev]

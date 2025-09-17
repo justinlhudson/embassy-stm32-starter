@@ -36,6 +36,10 @@ pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>
   let fcs = fcs16_ppp(payload);
   #[cfg(not(feature = "hdlc_fcs"))]
   let fcs: u16 = 0;
+
+  #[cfg(feature = "hdlc_fcs")]
+  defmt::info!("HDLC frame: payload len={}, FCS={=u16:x}", payload.len(), fcs);
+
   // Write payload
   for &b in payload {
     match b {
@@ -63,8 +67,14 @@ pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>
   out.push(HDLC_FLAG).ok();
 }
 
-/// Deframe HDLC data (returns Some(payload) if a full frame is found and FCS is valid when enabled)
-pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, N>, out: &mut heapless::Vec<u8, M>) -> Option<()> {
+/// HDLC deframe error type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HdlcError {
+  FcsMismatch { received: u16, calculated: u16, len: usize },
+}
+
+/// Deframe HDLC data (returns Ok(()) if a full frame is found and FCS is valid when enabled, Err(HdlcError) on error)
+pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, N>, out: &mut heapless::Vec<u8, M>) -> Result<(), HdlcError> {
   let mut in_frame = false;
   let mut escape = false;
   out.clear();
@@ -102,13 +112,18 @@ pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, 
           #[cfg(feature = "hdlc_fcs")]
           {
             let fcs_calc = fcs16_ppp(payload);
+            defmt::info!("HDLC deframe: payload len={}, FCS recv={=u16:x}, FCS calc={=u16:x}", payload_len, fcs_recv, fcs_calc);
             if fcs_recv == fcs_calc {
               out.truncate(payload_len);
-              return Some(());
+              return Ok(());
             } else {
               out.clear();
               defmt::error!("HDLC FCS mismatch: recv={=u16}, calc={=u16}, len={}", fcs_recv, fcs_calc, payload_len);
-              return None;
+              return Err(HdlcError::FcsMismatch {
+                received: fcs_recv,
+                calculated: fcs_calc,
+                len: payload_len,
+              });
             }
           }
           #[cfg(not(feature = "hdlc_fcs"))]
@@ -117,7 +132,7 @@ pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, 
             let _ = fcs_recv; // suppress unused when FCS disabled
             // FCS disabled: accept frame without verification (strip trailing 2 bytes)
             out.truncate(payload_len);
-            return Some(());
+            return Ok(());
           }
         }
         // else: empty frame, ignore
@@ -128,5 +143,9 @@ pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, 
     }
     i += 1;
   }
-  None
+  Err(HdlcError::FcsMismatch {
+    received: 0,
+    calculated: 0,
+    len: 0,
+  }) // No frame found or incomplete
 }
