@@ -31,12 +31,6 @@ pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>
   out.clear();
   out.push(HDLC_FLAG).ok();
 
-  defmt::debug!(
-    "HDLC frame input: {} bytes, hex: {:02x}",
-    payload.len(),
-    &payload[..core::cmp::min(16, payload.len())]
-  );
-
   // Compute FCS (PPP/HDLC) if enabled; otherwise 0
   #[cfg(feature = "hdlc_fcs")]
   let fcs = fcs16_ppp(payload);
@@ -67,15 +61,10 @@ pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>
     }
   }
   out.push(HDLC_FLAG).ok();
-
-  defmt::debug!("HDLC frame output: {} bytes (including flags/FCS)", out.len());
 }
 
 /// Deframe HDLC data (returns Some(payload) if a full frame is found and FCS is valid when enabled)
-pub fn hdlc_deframe<const N: usize, const M: usize>(
-  buf: &mut heapless::Vec<u8, N>,
-  out: &mut heapless::Vec<u8, M>,
-) -> Option<()> {
+pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, N>, out: &mut heapless::Vec<u8, M>) -> Option<()> {
   let mut in_frame = false;
   let mut escape = false;
   out.clear();
@@ -110,14 +99,6 @@ pub fn hdlc_deframe<const N: usize, const M: usize>(
           let (payload, fcs_bytes) = out.split_at(payload_len);
           let fcs_recv = u16::from_le_bytes([fcs_bytes[0], fcs_bytes[1]]);
 
-          defmt::debug!(
-            "HDLC deframe: total_len={}, payload_len={}, fcs_bytes=[{:02x},{:02x}]",
-            out.len(),
-            payload_len,
-            fcs_bytes[0],
-            fcs_bytes[1]
-          );
-
           #[cfg(feature = "hdlc_fcs")]
           {
             let fcs_calc = fcs16_ppp(payload);
@@ -126,12 +107,7 @@ pub fn hdlc_deframe<const N: usize, const M: usize>(
               return Some(());
             } else {
               out.clear();
-              defmt::error!(
-                "HDLC FCS mismatch: recv={=u16}, calc={=u16}, len={}",
-                fcs_recv,
-                fcs_calc,
-                payload_len
-              );
+              defmt::error!("HDLC FCS mismatch: recv={=u16}, calc={=u16}, len={}", fcs_recv, fcs_calc, payload_len);
               return None;
             }
           }

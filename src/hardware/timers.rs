@@ -5,15 +5,9 @@
 use embassy_time::Timer;
 
 /// Common timing utilities and constants
-pub struct TimingUtils;
+pub struct Timing;
 
-impl TimingUtils {
-  /// Standard blink rates in milliseconds
-  pub const FAST_BLINK_MS: u64 = 100;
-  pub const MEDIUM_BLINK_MS: u64 = 250;
-  pub const SLOW_BLINK_MS: u64 = 500;
-  pub const VERY_SLOW_BLINK_MS: u64 = 1000;
-
+impl Timing {
   /// Button debounce delay
   pub const BUTTON_DEBOUNCE_MS: u64 = 50;
 

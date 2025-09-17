@@ -106,20 +106,13 @@ pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
   let len_usize = core::cmp::min(msg.payload.len(), COMMS_MAX_PAYLOAD);
   let len: u16 = len_usize as u16; // Use actual payload length, not msg.length field
 
-  defmt::debug!("Encoding: payload.len()={}, len_field={}, len_usize={}", msg.payload.len(), msg.length, len_usize);
-  defmt::debug!("Message payload hex: {:02x}", &msg.payload[..]);
-
   buf.extend_from_slice(&msg.command.to_le_bytes()).ok();
   buf.push(msg.id).ok();
   buf.extend_from_slice(&msg.fragments.to_le_bytes()).ok();
   buf.extend_from_slice(&msg.fragment.to_le_bytes()).ok();
   buf.extend_from_slice(&len.to_le_bytes()).ok();
 
-  defmt::debug!("Header encoded: {} bytes, about to add {} payload bytes", buf.len(), len_usize);
   buf.extend_from_slice(&msg.payload[..len_usize]).ok();
-
-  defmt::debug!("Final buffer: {} bytes, hex: {:02x}", buf.len(), &buf[..core::cmp::min(16, buf.len())]);
-  defmt::debug!("Encoded frame size: {} (header + {} payload)", buf.len(), len_usize);
 
   // HDLC-frame and write
   let mut framed: FramedBuf = Vec::new();
@@ -137,6 +130,13 @@ pub async fn serial_hdlc_consumer_task() {
     let msg = serial::recv_raw().await;
     // Append to buffer
     rx_buf.extend_from_slice(&msg).ok();
+
+    // Safety check: clear buffer if it grows too large
+    if rx_buf.len() >= COMMS_BYTE_VEC_SIZE {
+      defmt::warn!("serial_hdlc_consumer_task: rx_buf overflow ({} bytes), clearing buffer", rx_buf.len());
+      rx_buf.clear();
+    }
+
     // Try to decode HDLC frame(s)
     while try_decode_hdlc(&mut rx_buf, &mut decoded) {
       // Try to parse as a Comms frame and publish
@@ -171,20 +171,6 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
   let len = u16::from_le_bytes([bytes[7], bytes[8]]) as usize;
   let total = COMMS_HEADER_LEN + len;
 
-  defmt::debug!(
-    "Parsing: frame_len={}, header_len={}, payload_len={}, total_expected={}",
-    bytes.len(),
-    COMMS_HEADER_LEN,
-    len,
-    total
-  );
-
-  // Hex dump first 16 bytes of frame for debugging
-  if bytes.len() > 0 {
-    let dump_len = core::cmp::min(16, bytes.len());
-    defmt::debug!("Frame hex dump (first {} bytes): {:02x}", dump_len, &bytes[..dump_len]);
-  }
-
   // Check if frame has the expected length (header + payload)
   if bytes.len() != total {
     // Handle common case: extra 0x00 byte inserted after header
@@ -206,8 +192,6 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
     COMMS_HEADER_LEN // Normal case
   };
 
-  defmt::debug!("Payload parsing: start_offset={}, copy={} bytes", payload_start, copy);
-
   if bytes.len() >= payload_start + copy {
     payload.extend_from_slice(&bytes[payload_start..payload_start + copy]).ok()?;
   } else {
@@ -215,7 +199,6 @@ fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
     return None;
   }
 
-  defmt::debug!("Parsed payload: requested={}, copied={}, actual_len={}", len, copy, payload.len());
   Some(Message {
     command: cmd,
     id,

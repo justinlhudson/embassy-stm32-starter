@@ -148,7 +148,7 @@ where
   RXDMA: RxDma<T> + 'static,
 {
   let mut cfg = UartConfig::default();
-  cfg.baudrate = 115_200;
+  cfg.baudrate = 115_200; // cfg.baudrate = 921_600;
 
   let uart = Uart::new(usart, rx, tx, irqs, tx_dma, rx_dma, cfg).unwrap();
   let (tx, rx) = uart.split();

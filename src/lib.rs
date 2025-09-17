@@ -9,6 +9,8 @@ use embassy_stm32 as _; // import to get the interrupt vectors
 
 pub use defmt::*; // re-export all defmt macros for convenience
 
+pub use embassy_time::Timer; // re-export embassy time for convenience
+
 // Hardware abstraction layer modules
 pub mod hardware {
   pub mod gpio;
