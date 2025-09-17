@@ -13,6 +13,7 @@ use heapless::Vec;
 // Define a constant for buffer size
 const SERIAL_BUFFER_SIZE: usize = 256;
 const SERIAL_QUEUE_DEPTH: usize = 4;
+const SERIAL_BAUDRATE: u32 = 115_200;
 
 // Bind USART2 interrupt handler for async operation
 bind_interrupts!(pub struct Irqs {
@@ -148,7 +149,7 @@ where
   RXDMA: RxDma<T> + 'static,
 {
   let mut cfg = UartConfig::default();
-  cfg.baudrate = 115_200; // cfg.baudrate = 921_600;
+  cfg.baudrate = SERIAL_BAUDRATE;
 
   let uart = Uart::new(usart, rx, tx, irqs, tx_dma, rx_dma, cfg).unwrap();
   let (tx, rx) = uart.split();

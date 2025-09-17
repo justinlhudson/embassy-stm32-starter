@@ -15,6 +15,18 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 
 ## 🏗️ Architecture & Configuration
 
+[note]
+
+## 🧩 Heapless Design
+
+This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynamic data structures, such as `heapless::Vec`. This means:
+
+- **No dynamic heap allocation**: All collections have fixed, compile-time capacities and are allocated on the stack or in static memory.
+- **Deterministic memory usage**: Maximum RAM usage is known at compile time, with no risk of heap fragmentation or allocation failures at runtime.
+- **Embedded-friendly**: Suitable for microcontrollers and real-time systems where dynamic allocation is discouraged or unavailable.
+
+As a result, reported heap usage is always zero unless a dynamic allocator is added. All memory usage comes from stack and statically allocated buffers.
+
 ### Supported Boards
 
 | Board          | MCU         | Flash  | RAM   | Serial | LED | Button |
