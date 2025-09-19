@@ -51,8 +51,14 @@ impl BoardConfig {
   pub const RAM_START: u32 = 0x20000000;
   /// Watchdog timeout in microseconds
   pub const WATCHDOG_TIMEOUT_US: u32 = 1_000_000;
-  /// End address of RAM (for stack usage reporting)
-  pub const RAM_END: u32 = 0x20050000; // 320KB RAM ends at 0x20050000
+    /// End address of RAM (for stack usage reporting)
+    pub const RAM_END: u32 = 0x20050000; // 320KB RAM ends at 0x20050000
+
+  /// END address of flash storage region (last sector)
+  pub const FLASH_STORAGE_END: u32 = 0x081E0000; // Example: last sector for F413ZH (adjust as needed)
+  pub const FLASH_STORAGE_SIZE: usize = 128 * 1024; // 128KB (adjust for actual sector size)
+  /// START address of flash storage region (calculated)
+  pub const FLASH_STORAGE_START: u32 = Self::FLASH_STORAGE_END - Self::FLASH_STORAGE_SIZE as u32;
   // Board constants (mirroring F446RE style)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-144 F413ZH";
   pub const MCU_NAME: &'static str = "STM32F413ZH";

@@ -38,6 +38,12 @@ impl BoardConfig {
   pub const WATCHDOG_TIMEOUT_US: u32 = 1_000_000;
   /// End address of RAM (for stack usage reporting)
   pub const RAM_END: u32 = 0x20020000; // 128KB RAM ends at 0x20020000
+
+  /// END address of flash storage region (last sector)
+  pub const FLASH_STORAGE_END: u32 = 0x080E0000; // 128KB sector at end
+  pub const FLASH_STORAGE_SIZE: usize = 128 * 1024; // 128KB
+  /// START address of flash storage region (calculated)
+  pub const FLASH_STORAGE_START: u32 = Self::FLASH_STORAGE_END - Self::FLASH_STORAGE_SIZE as u32;
   // Board constants (for compatibility with existing applications)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-64 F446RE";
   pub const MCU_NAME: &'static str = "STM32F446RE";
