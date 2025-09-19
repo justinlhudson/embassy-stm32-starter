@@ -1,3 +1,4 @@
+use cortex_m::peripheral::SCB;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use heapless::Vec;
@@ -181,6 +182,8 @@ fn try_decode_hdlc(buf: &mut ByteVec, out: &mut ByteVec) -> bool {
       if received != 0 || calculated != 0 || len != 0 {
         FCS_ERROR_COUNT.fetch_add(1, Ordering::Relaxed);
         defmt::warn!("HDLC FCS error: recv={=u16}, calc={=u16}, len={}", received, calculated, len);
+        // Reset the board immediately on FCS error
+        SCB::sys_reset();
       }
       false
     }
