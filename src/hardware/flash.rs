@@ -22,7 +22,7 @@ pub async fn write_block(flash: &mut Flash<'_>, offset: usize, data: &[u8]) -> R
   let end_addr = addr + data.len() as u32;
   if end_addr > storage_end() {
     defmt::error!("Attempt to write past end of storage: addr=0x{:08X}, end=0x{:08X}", addr, end_addr);
-    return Err(Error::InvalidArgument);
+    return Err(Error::Size);
   }
   flash.write(addr, data).await
 }
@@ -33,7 +33,7 @@ pub fn read_block(offset: usize, buf: &mut [u8]) -> Result<(), Error> {
   let end_addr = addr + buf.len() as u32;
   if end_addr > storage_end() {
     defmt::error!("Attempt to read past end of storage: addr=0x{:08X}, end=0x{:08X}", addr, end_addr);
-    return Err(Error::InvalidArgument);
+    return Err(Error::Size);
   }
   let flash_ptr = addr as *const u8;
   unsafe {
