@@ -1,5 +1,9 @@
-//! Simple flash storage for STM32 using last sector
-//! Provides block read/write APIs for persistent storage
+// Simple flash storage for STM32 using last sector
+/// Provides block read/write APIs for persistent storage
+use embassy_stm32::bind_interrupts;
+bind_interrupts!(pub struct IrqsFlash {
+  FLASH => embassy_stm32::flash::InterruptHandler;
+});
 
 use crate::board::BoardConfig;
 use core::ptr;

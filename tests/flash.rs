@@ -1,53 +1,48 @@
 #![no_std]
 #![no_main]
 
+use cortex_m_rt::entry;
 use embassy_stm32::flash::Flash;
 use embassy_stm32_starter::hardware::flash;
-use embassy_stm32_starter::*;
-use embedded_storage::nor_flash::NorFlash;
+use embassy_stm32_starter::hardware::flash::IrqsFlash;
 use semihosting::process;
 
-#[cortex_m_rt::entry]
+#[entry]
 fn main() -> ! {
   let p = embassy_stm32::init(Default::default());
-  info!("Flash read/write test started");
-
-  // Print storage region info for debugging
-  info!("FLASH_STORAGE_START: 0x{:08X}", flash::storage_start());
-  info!("FLASH_STORAGE_END:   0x{:08X}", flash::storage_end());
-  info!("FLASH_STORAGE_SIZE:  {} bytes", flash::storage_size());
-
-  // Use blocking flash instance
-  let mut flash_hw = Flash::new_blocking(p.FLASH);
+  let mut flash_hw = Flash::new(p.FLASH, IrqsFlash);
   let test_offset = 0;
   let test_data: [u8; 16] = [0xA5; 16];
   let mut read_buf: [u8; 16] = [0; 16];
 
-  // Erase only the first 32KB of the last sector using board constants
-  let _ = flash_hw.erase(
-    embassy_stm32_starter::board::BoardConfig::FLASH_STORAGE_START,
-    embassy_stm32_starter::board::BoardConfig::FLASH_STORAGE_START + 32 * 1024,
-  );
-
-  // Write test pattern
-  match flash_hw.write(flash::storage_start() + test_offset as u32, &test_data) {
-    Ok(_) => info!("Flash write OK"),
-    Err(e) => info!("Flash write error: {:?}", e),
+  // Helper to poll async future to completion
+  fn block_on<F: core::future::Future>(fut: F) -> F::Output {
+    use core::pin::pin;
+    use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+    fn dummy(_: *const ()) {}
+    fn clone(_: *const ()) -> RawWaker {
+      dummy_waker()
+    }
+    fn dummy_waker() -> RawWaker {
+      RawWaker::new(core::ptr::null(), &RawWakerVTable::new(clone, dummy, dummy, dummy))
+    }
+    let waker = unsafe { Waker::from_raw(dummy_waker()) };
+    let mut cx = Context::from_waker(&waker);
+    let mut fut = pin!(fut);
+    loop {
+      match fut.as_mut().poll(&mut cx) {
+        Poll::Ready(val) => break val,
+        Poll::Pending => {}
+      }
+    }
   }
 
-  // Read back
-  match flash::read_block(test_offset, &mut read_buf) {
-    Ok(_) => info!("Flash read OK"),
-    Err(e) => info!("Flash read error: {:?}", e),
-  }
-
-  // Check
-  if read_buf == test_data {
-    info!("Flash read/write test PASSED");
-  } else {
-    info!("Flash read/write test FAILED");
-  }
-
-  info!("Flash read/write test completed");
+  // Erase the storage region (blocking)
+  let _ = block_on(flash::erase_blocks(&mut flash_hw));
+  // Write block (blocking)
+  let _ = block_on(flash::write_block(&mut flash_hw, test_offset, &test_data));
+  // Read block (sync)
+  let _ = flash::read_block(test_offset, &mut read_buf);
+  let _passed = read_buf == test_data;
   process::exit(0)
 }

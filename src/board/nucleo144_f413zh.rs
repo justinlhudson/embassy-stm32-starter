@@ -51,8 +51,8 @@ impl BoardConfig {
   pub const RAM_START: u32 = 0x20000000;
   /// Watchdog timeout in microseconds
   pub const WATCHDOG_TIMEOUT_US: u32 = 1_000_000;
-    /// End address of RAM (for stack usage reporting)
-    pub const RAM_END: u32 = 0x20050000; // 320KB RAM ends at 0x20050000
+  /// End address of RAM (for stack usage reporting)
+  pub const RAM_END: u32 = 0x20050000; // 320KB RAM ends at 0x20050000
 
   /// END address of flash storage region (last sector)
   pub const FLASH_STORAGE_END: u32 = 0x081E0000; // Example: last sector for F413ZH (adjust as needed)
