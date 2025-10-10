@@ -9,6 +9,7 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 - 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64) and STM32F413ZH (Nucleo-144)
 - 🔄 **One-Command Setup**: Automatic board configuration with `./setup nucleo`
 - 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16
+- 💾 **Flash Storage**: Auto-erase strategy with embassy-stm32 bug workarounds
 - ⚡ **Async Tasks**: LED, button, RTC, and communication handling
 - 🔧 **VS Code Ready**: Pre-configured debugging and IntelliSense
 - ✅ **Hardware Testing**: Integration tests on real hardware
@@ -215,7 +216,7 @@ embassy-stm32-starter/
 
 #### Hardware Layer (`src/hardware/`)
 
-- **`flash.rs`**: Flash storage operations with board-specific sector configuration
+- **`flash.rs`**: Flash storage operations with direct register access, auto-erase functionality, and embassy-stm32 bug workarounds
 - **`gpio.rs`**: LED control (`LedControl`) and button reading (`ButtonReader`) utilities
 - **`serial.rs`**: DMA-based UART with idle interrupt detection, async RX tasks
 - **`timers.rs`**: Timing constants and async delay helpers (`TimingUtils`)
@@ -358,7 +359,14 @@ Each board uses a dedicated flash sector for persistent storage:
 - **STM32F446RE**: Sector 6 (256KB-384KB, 128KB size)
 - **STM32F413ZH**: Last sector (1408KB-1536KB, 128KB size)
 
-The flash test validates storage region configuration and read operations.
+> **⚠️ IMPORTANT - Auto-Erase Strategy**: The flash demo implements an automatic erase-on-dirty strategy to handle flash physics limitations. On first boot with clean flash (all 0xFF), it writes test data successfully. On subsequent boots with dirty flash, it automatically erases the sector for the next boot cycle. This ensures reliable operation even if the erase operation causes a system reset, as the following boot will have clean flash ready for writing.
+
+**Key Functions:**
+- `flash::erase_flash_sector()` - Hardware sector erase (may cause reset when run from flash)  
+- `flash::write_direct()` - Direct register-based write (bypasses embassy-stm32 v0.4.0 divide-by-zero bug)
+- `flash::read_block()` - Safe read operations for verification
+
+The flash operations use direct STM32F4 register access to work around known issues in embassy-stm32 v0.4.0.
 
 ### Feature Flags
 

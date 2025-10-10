@@ -107,29 +107,25 @@ pub fn erase_sector_direct(sector_addr: u32) -> Result<(), Error> {
 
     // Configure sector erase
     let cr_reg = FLASH_CR as *mut u32;
-    unsafe {
-      let mut cr_value = cr_reg.read_volatile();
-      cr_value &= !(0xF << 3); // Clear SNB bits
-      cr_value |= (sector << 3) & (0xF << 3); // Set sector number
-      cr_value |= FLASH_CR_SER; // Set sector erase bit
-      cr_reg.write_volatile(cr_value);
+    let mut cr_value = cr_reg.read_volatile();
+    cr_value &= !(0xF << 3); // Clear SNB bits
+    cr_value |= (sector << 3) & (0xF << 3); // Set sector number
+    cr_value |= FLASH_CR_SER; // Set sector erase bit
+    cr_reg.write_volatile(cr_value);
 
-      // Start erase operation
-      cr_value = cr_reg.read_volatile();
-      cr_value |= FLASH_CR_STRT;
-      cr_reg.write_volatile(cr_value);
-    }
+    // Start erase operation
+    cr_value = cr_reg.read_volatile();
+    cr_value |= FLASH_CR_STRT;
+    cr_reg.write_volatile(cr_value);
 
     // Wait for completion
     wait_flash_ready();
 
     // Clear erase bit and lock flash
     let cr_reg = FLASH_CR as *mut u32;
-    unsafe {
-      let mut cr_value = cr_reg.read_volatile();
-      cr_value &= !FLASH_CR_SER;
-      cr_reg.write_volatile(cr_value);
-    }
+    let mut cr_value = cr_reg.read_volatile();
+    cr_value &= !FLASH_CR_SER;
+    cr_reg.write_volatile(cr_value);
     lock_flash();
   }
 
@@ -137,7 +133,45 @@ pub fn erase_sector_direct(sector_addr: u32) -> Result<(), Error> {
   Ok(())
 }
 
-/// Direct flash write using register manipulation (workaround for embassy-stm32 v0.4.0 bug)
+/// Soft erase by writing 0xFF bytes (safer alternative to sector erase)
+pub fn soft_erase_region(size: usize) -> Result<(), Error> {
+  defmt::info!("Soft erase: writing {} bytes of 0xFF to storage region", size);
+
+  // Create buffer filled with 0xFF (erased state)
+  let erase_buffer = [0xFFu8; 256]; // Use chunks of 256 bytes max
+  let storage_addr = storage_start();
+  let max_size = storage_size();
+
+  if size > max_size {
+    defmt::error!("Soft erase size {} exceeds storage region {}", size, max_size);
+    return Err(Error::Size);
+  }
+
+  let mut remaining = size;
+  let mut current_addr = storage_addr;
+
+  while remaining > 0 {
+    let chunk_size = if remaining > erase_buffer.len() { erase_buffer.len() } else { remaining };
+
+    defmt::debug!("Soft erasing chunk: {} bytes at 0x{:08X}", chunk_size, current_addr);
+
+    match write_direct(current_addr, &erase_buffer[..chunk_size]) {
+      Ok(()) => {
+        current_addr += chunk_size as u32;
+        remaining -= chunk_size;
+      }
+      Err(e) => {
+        defmt::error!("Soft erase failed at address 0x{:08X}", current_addr);
+        return Err(e);
+      }
+    }
+  }
+
+  defmt::info!("✅ Soft erase completed: {} bytes", size);
+  Ok(())
+}
+
+/// Alternative write using direct register access (workaround for embassy-stm32 v0.4.0 bug)
 pub fn write_direct(addr: u32, data: &[u8]) -> Result<(), Error> {
   defmt::info!("Direct write {} bytes to address: 0x{:08X}", data.len(), addr);
 
@@ -150,11 +184,9 @@ pub fn write_direct(addr: u32, data: &[u8]) -> Result<(), Error> {
 
     // Enable programming
     let cr_reg = FLASH_CR as *mut u32;
-    unsafe {
-      let mut cr_value = cr_reg.read_volatile();
-      cr_value |= FLASH_CR_PG;
-      cr_reg.write_volatile(cr_value);
-    }
+    let mut cr_value = cr_reg.read_volatile();
+    cr_value |= FLASH_CR_PG;
+    cr_reg.write_volatile(cr_value);
 
     // Write data byte by byte (STM32F4 supports byte programming)
     for (i, &byte) in data.iter().enumerate() {
@@ -165,21 +197,17 @@ pub fn write_direct(addr: u32, data: &[u8]) -> Result<(), Error> {
 
       // Write the byte directly
       let write_ptr = byte_addr as *mut u8;
-      unsafe {
-        write_ptr.write_volatile(byte);
-      }
+      write_ptr.write_volatile(byte);
 
       // Wait for this byte to be written
       wait_flash_ready();
 
       // Verify immediately after writing
-      unsafe {
-        let read_back = *(write_ptr as *const u8);
-        if read_back != byte {
-          defmt::error!("Flash write verification failed at offset {}: wrote 0x{:02X}, read 0x{:02X}", i, byte, read_back);
-        } else {
-          defmt::debug!("Byte {} verified OK", i);
-        }
+      let read_back = *(write_ptr as *const u8);
+      if read_back != byte {
+        defmt::error!("Flash write verification failed at offset {}: wrote 0x{:02X}, read 0x{:02X}", i, byte, read_back);
+      } else {
+        defmt::debug!("Byte {} verified OK", i);
       }
     }
 
@@ -187,11 +215,9 @@ pub fn write_direct(addr: u32, data: &[u8]) -> Result<(), Error> {
     wait_flash_ready();
 
     // Disable programming and lock flash
-    unsafe {
-      let mut cr_value = cr_reg.read_volatile();
-      cr_value &= !FLASH_CR_PG;
-      cr_reg.write_volatile(cr_value);
-    }
+    let mut cr_value = cr_reg.read_volatile();
+    cr_value &= !FLASH_CR_PG;
+    cr_reg.write_volatile(cr_value);
     lock_flash();
   }
 
@@ -251,6 +277,42 @@ fn get_sector_number(addr: u32) -> Result<u32, Error> {
     _ => {
       defmt::error!("Invalid flash address: 0x{:08X}", addr);
       Err(Error::Size)
+    }
+  }
+}
+
+/// Flash sector erase function
+/// WARNING: This may cause system reset when executed from flash!
+pub async fn erase_flash_sector() -> Result<(), Error> {
+  defmt::info!("🔥 Flash Sector Erase");
+  defmt::info!("⚠️  WARNING: This will erase flash sector and may cause system reset!");
+
+  let storage_start = storage_start();
+  defmt::info!("Erasing flash sector at address: 0x{:08X}", storage_start);
+
+  match erase_sector_direct(storage_start) {
+    Ok(()) => {
+      defmt::info!("✅ Flash sector erase completed successfully!");
+
+      // Verify erase by reading a few bytes
+      let mut buffer = [0u8; 16];
+      match read_block(0, &mut buffer) {
+        Ok(()) => {
+          if buffer.iter().all(|&b| b == 0xFF) {
+            defmt::info!("✅ Flash properly erased - all bytes are 0xFF");
+          } else {
+            defmt::info!("❌ Flash erase verification failed: {:?}", buffer);
+          }
+        }
+        Err(_) => {
+          defmt::info!("❌ Failed to read flash after erase");
+        }
+      }
+      Ok(())
+    }
+    Err(e) => {
+      defmt::info!("❌ Flash sector erase failed");
+      Err(e)
     }
   }
 }
