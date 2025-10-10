@@ -27,6 +27,9 @@ use embassy_stm32::rtc::{Rtc, RtcConfig};
 use embassy_stm32::usart::UartTx;
 use embassy_stm32::wdg::IndependentWatchdog;
 
+use embassy_stm32::Config as EmbassyConfig;
+// Advanced RCC configuration disabled for compatibility
+
 pub struct BoardConfig;
 
 // Implement the minimal trait per base.rs
@@ -43,6 +46,11 @@ impl InterruptHandlers for BoardConfig {
 }
 
 impl BoardConfig {
+  /// Returns the default Embassy config (16 MHz HSI)
+  /// Note: Advanced clock configuration disabled due to embassy-stm32 API changes
+  pub fn embassy_config() -> EmbassyConfig {
+    EmbassyConfig::default()
+  }
   /// Busy-wait loop cycles per ms for delays (used by timers.rs)
   pub const fn cycles_per_ms() -> u32 {
     0 // Not used (async timer available)
@@ -53,6 +61,13 @@ impl BoardConfig {
   pub const WATCHDOG_TIMEOUT_US: u32 = 1_000_000;
   /// End address of RAM (for stack usage reporting)
   pub const RAM_END: u32 = 0x20050000; // 320KB RAM ends at 0x20050000
+
+  /// Flash storage region: Use last 128KB sector of STM32F413ZH (1536KB flash)
+  /// STM32F413ZH flash: 1536KB total (0x08000000 to 0x08180000)
+  /// Using last 128KB for storage: 1408KB to 1536KB from flash base
+  pub const FLASH_STORAGE_START: u32 = 0x08160000; // Start of last 128KB (1408KB from base)
+  pub const FLASH_STORAGE_END: u32 = 0x08180000; // End of flash (1536KB from base)
+  pub const FLASH_STORAGE_SIZE: usize = 128 * 1024; // 128KB storage region
   // Board constants (mirroring F446RE style)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-144 F413ZH";
   pub const MCU_NAME: &'static str = "STM32F413ZH";

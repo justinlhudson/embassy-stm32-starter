@@ -9,6 +9,7 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 - 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64) and STM32F413ZH (Nucleo-144)
 - 🔄 **One-Command Setup**: Automatic board configuration with `./setup nucleo`
 - 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16
+- 💾 **Flash Storage**: Auto-erase strategy with embassy-stm32 bug workarounds
 - ⚡ **Async Tasks**: LED, button, RTC, and communication handling
 - 🔧 **VS Code Ready**: Pre-configured debugging and IntelliSense
 - ✅ **Hardware Testing**: Integration tests on real hardware
@@ -185,6 +186,7 @@ embassy-stm32-starter/
 │   │   └── nucleo144_f413zh.rs       # STM32F413ZH Nucleo-144 config
 │   │
 │   ├── 📂 hardware/                  # 🔧 Hardware Abstraction Layer
+│   │   ├── flash.rs                  # Flash storage read/write operations
 │   │   ├── gpio.rs                   # LED/button control utilities
 │   │   ├── serial.rs                 # UART with DMA + idle detection
 │   │   └── timers.rs                 # Timing constants & async delays
@@ -199,7 +201,8 @@ embassy-stm32-starter/
 │       └── tasks.rs                  # Embassy async tasks (LED, button, RTC)
 │
 ├── 🧪 tests/                         # Integration testing
-│   └── integration.rs                # Hardware-in-the-loop tests
+│   ├── integration.rs                # Hardware-in-the-loop tests
+│   └── flash.rs                      # Flash storage configuration tests
 │
 └── 📋 Templates/                     # Configuration templates
     ├── Cargo.template.toml           # Cargo config template
@@ -213,6 +216,7 @@ embassy-stm32-starter/
 
 #### Hardware Layer (`src/hardware/`)
 
+- **`flash.rs`**: Flash storage operations with direct register access, auto-erase functionality, and embassy-stm32 bug workarounds
 - **`gpio.rs`**: LED control (`LedControl`) and button reading (`ButtonReader`) utilities
 - **`serial.rs`**: DMA-based UART with idle interrupt detection, async RX tasks
 - **`timers.rs`**: Timing constants and async delay helpers (`TimingUtils`)
@@ -319,6 +323,7 @@ cargo start example              # Alias for run --bin example
 
 # Test commands
 cargo test --test integration    # Run hardware tests
+cargo test --test flash          # Run flash storage tests
 cargo tests                     # Alias for test --test integration
 ```
 
@@ -347,21 +352,33 @@ Message Payload (9-byte header + data):
 | `Ping`  | 0x03  | Ping request/response   |
 | `Raw`   | 0x04  | Raw data transfer       |
 
+### Flash Storage
+
+Each board uses a dedicated flash sector for persistent storage:
+
+- **STM32F446RE**: Sector 6 (256KB-384KB, 128KB size)
+- **STM32F413ZH**: Last sector (1408KB-1536KB, 128KB size)
+
+> **⚠️ Flash Pattern**: Demo alternates write→erase cycles. Clean flash (0xFF) → writes data. Dirty flash → erases for next boot. Each flash location is write-once until erased.
+
+**API:** `flash::erase_flash_sector()` | `flash::write_direct()` | `flash::read_block()`
+
 ### Feature Flags
 
 ```bash
-# Enable HDLC CRC-16 verification (disabled by default)
+# Enable HDLC CRC-16 verification (enabled by default)
 cargo build --features hdlc_fcs
 cargo run --features hdlc_fcs --bin example
 ```
 
-- **`hdlc_fcs` OFF (default)**: Frames include 2-byte trailer, no verification
-- **`hdlc_fcs` ON**: PPP/HDLC 16-bit CRC (poly 0x8408) appended and verified
+- **`hdlc_fcs` OFF**: Frames include 2-byte trailer, no verification
+- **`hdlc_fcs` ON (default)**: PPP/HDLC 16-bit CRC (poly 0x8408) appended and verified
 
 ## 🧪 Testing
 
 ```bash
 cargo test --test integration    # Hardware-in-the-loop tests
+cargo test --test flash          # Flash storage configuration tests
 ```
 
 ## 📄 License

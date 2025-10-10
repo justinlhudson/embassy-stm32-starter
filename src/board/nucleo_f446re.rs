@@ -1,4 +1,9 @@
-// Board configuration for STM32 Nucleo-64 Development Board with STM32F446RE
+// Board configuration for STM32 Nucleo-64 Deve  /// Flash storage region: Use sector 3 (16KB sector of STM32F446RE)
+/// STM32F446RE flash layout: Sectors 0-3 (16KB each), Sector 4 (64KB), Sectors 5-7 (128KB each)  
+/// Using sector 3: 48KB to 64KB from flash base (should be safe for testing)
+pub const FLASH_STORAGE_START: u32 = 0x0800C000; // Start of sector 3 (48KB from base)
+pub const FLASH_STORAGE_END: u32 = 0x08010000; // End of sector 3 (64KB from base)
+pub const FLASH_STORAGE_SIZE: usize = 16 * 1024; // 16KB - size of sector 3t Board with STM32F446RE
 //
 // Board specifications:
 // - STM32F446RE MCU (ARM Cortex-M4F @ 180 MHz)
@@ -25,9 +30,15 @@ use embassy_stm32::rtc::{Rtc, RtcConfig};
 use embassy_stm32::usart::UartTx;
 use embassy_stm32::wdg::IndependentWatchdog;
 
+use embassy_stm32::Config as EmbassyConfig;
+
 pub struct BoardConfig;
 
 impl BoardConfig {
+  /// Returns the default Embassy config (16 MHz HSI)
+  pub fn embassy_config() -> EmbassyConfig {
+    EmbassyConfig::default()
+  }
   /// Busy-wait loop cycles per ms for delays (used by timers.rs)
   pub const fn cycles_per_ms() -> u32 {
     0 // Not used (async timer available)
@@ -38,6 +49,13 @@ impl BoardConfig {
   pub const WATCHDOG_TIMEOUT_US: u32 = 1_000_000;
   /// End address of RAM (for stack usage reporting)
   pub const RAM_END: u32 = 0x20020000; // 128KB RAM ends at 0x20020000
+
+  /// Flash storage region: Use sector 6 (128KB sector of STM32F446RE)
+  /// STM32F446RE flash layout: Sectors 0-3 (16KB each), Sector 4 (64KB), Sectors 5-7 (128KB each)
+  /// Using sector 6: 256KB to 384KB from flash base
+  pub const FLASH_STORAGE_START: u32 = 0x08040000; // Start of sector 6 (256KB from base)
+  pub const FLASH_STORAGE_END: u32 = 0x08060000; // End of sector 6 (384KB from base)  
+  pub const FLASH_STORAGE_SIZE: usize = 128 * 1024; // 128KB - size of sector 6
   // Board constants (for compatibility with existing applications)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-64 F446RE";
   pub const MCU_NAME: &'static str = "STM32F446RE";

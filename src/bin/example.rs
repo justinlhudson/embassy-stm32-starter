@@ -6,6 +6,7 @@ use embassy_stm32::Config;
 use embassy_stm32_starter::board::BoardConfig;
 use embassy_stm32_starter::common::tasks::*;
 use embassy_stm32_starter::hardware::Timing;
+use embassy_stm32_starter::hardware::flash;
 #[allow(unused_imports)]
 use embassy_stm32_starter::prelude::*;
 use embassy_stm32_starter::*;
@@ -28,6 +29,9 @@ async fn main(_spawner: Spawner) {
   let config = Config::default();
   let p = embassy_stm32::init(config);
   let (led, button, mut wdt, rtc, comm) = BoardConfig::init_all_hardware(_spawner, p);
+
+  // Demonstrate flash storage functionality
+  flash_demo().await;
 
   _spawner.spawn(button_monitor(button)).ok();
   _spawner.spawn(rtc_clock(rtc)).ok();
@@ -78,5 +82,28 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
         Timer::after_millis(1).await; // backoff when no message is ready
       }
     }
+  }
+}
+
+/// Demonstrate flash storage by reading previous random number and writing a new one
+async fn flash_demo() {
+  info!("🔥 Flash Storage Demo - Auto-erase on dirty flash");
+
+  // Read current flash contents
+  let mut buffer = [0u8; 16];
+  flash::read_block(0, &mut buffer).unwrap();
+  info!("📖 Current flash contents: {:?}", buffer);
+
+  // Check if flash is erased (all 0xFF)
+  if buffer[0..4].iter().all(|&b| b == 0xFF) {
+    // Flash is clean - write test data
+    let data = [0x12, 0x34, 0x56, 0x78];
+    flash::write_direct(flash::storage_start(), &data).unwrap();
+    info!("✅ Successfully wrote {:?} to clean flash", data);
+  } else {
+    // Flash has data - erase it for next boot
+    info!("⚠️  Flash contains data - erasing for next boot");
+    flash::erase_flash_sector().await.unwrap();
+    info!("🔄 Flash erased! On next boot, demo will write to clean flash");
   }
 }
