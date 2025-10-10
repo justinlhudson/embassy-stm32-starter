@@ -48,9 +48,48 @@ fn main() -> ! {
     info!("❌ Flash configuration test FAILED");
   }
 
-  // NOTE: Skipping erase/write operations due to embassy-stm32 v0.4.0 bug
-  // that causes divide by zero error in flash driver for STM32F446RE.
-  // This appears to be a known issue with the flash sector size calculation.
+  // Attempt flash operations with workarounds for embassy-stm32 v0.4.0 bug
+  info!("Testing flash operations with workarounds...");
+
+  // Try direct flash operations (workaround functions)
+  match flash::erase_sector_direct(start) {
+    Ok(()) => {
+      info!("✅ Direct erase workaround test PASSED");
+
+      let test_data: [u8; 16] = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00];
+
+      match flash::write_direct(start, &test_data) {
+        Ok(()) => {
+          info!("✅ Direct write workaround test PASSED");
+
+          // Verify the write by reading back the data
+          let mut verify_buf: [u8; 16] = [0; 16];
+          match flash::read_block(0, &mut verify_buf) {
+            Ok(()) => {
+              if verify_buf == test_data {
+                info!("✅ Write verification PASSED - data matches!");
+                info!("Written: {:02X}", test_data);
+                info!("Read:    {:02X}", verify_buf);
+              } else {
+                info!("❌ Write verification FAILED - data mismatch");
+                info!("Expected: {:02X}", test_data);
+                info!("Got:      {:02X}", verify_buf);
+              }
+            }
+            Err(_) => {
+              info!("❌ Write verification FAILED - read error");
+            }
+          }
+        }
+        Err(_) => {
+          info!("❌ Direct write workaround test FAILED");
+        }
+      }
+    }
+    Err(_) => {
+      info!("❌ Direct erase workaround test FAILED");
+    }
+  }
 
   info!("Flash test completed");
   process::exit(0)
