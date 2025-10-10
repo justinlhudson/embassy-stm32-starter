@@ -359,14 +359,9 @@ Each board uses a dedicated flash sector for persistent storage:
 - **STM32F446RE**: Sector 6 (256KB-384KB, 128KB size)
 - **STM32F413ZH**: Last sector (1408KB-1536KB, 128KB size)
 
-> **⚠️ IMPORTANT - Auto-Erase Strategy**: The flash demo implements an automatic erase-on-dirty strategy to handle flash physics limitations. On first boot with clean flash (all 0xFF), it writes test data successfully. On subsequent boots with dirty flash, it automatically erases the sector for the next boot cycle. This ensures reliable operation even if the erase operation causes a system reset, as the following boot will have clean flash ready for writing.
+> **⚠️ Flash Pattern**: Demo alternates write→erase cycles. Clean flash (0xFF) → writes data. Dirty flash → erases for next boot. Each flash location is write-once until erased.
 
-**Key Functions:**
-- `flash::erase_flash_sector()` - Hardware sector erase (may cause reset when run from flash)  
-- `flash::write_direct()` - Direct register-based write (bypasses embassy-stm32 v0.4.0 divide-by-zero bug)
-- `flash::read_block()` - Safe read operations for verification
-
-The flash operations use direct STM32F4 register access to work around known issues in embassy-stm32 v0.4.0.
+**API:** `flash::erase_flash_sector()` | `flash::write_direct()` | `flash::read_block()`
 
 ### Feature Flags
 
