@@ -18,8 +18,6 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 
 ## 🏗️ Architecture & Configuration
 
-[note]
-
 ## 🧩 Heapless Design
 
 This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynamic data structures, such as `heapless::Vec`. This means:
@@ -113,18 +111,6 @@ The project includes comprehensive VS Code support:
 - **Debugging**: Probe-rs integration with automatic chip selection
 - **Formatting**: Automatic code formatting on save
 
-## 📁 Project Structure
-
-```
-src/
-├── bin/example.rs                # Demo application
-├── board/                        # Board configurations
-├── hardware/                     # GPIO, serial, timers
-├── service/comm.rs              # Message handling
-├── protocol/hdlc.rs             # HDLC framing
-└── common/tasks.rs              # Async tasks
-```
-
 ## 🛠️ Setup & Usage
 
 ```bash
@@ -139,27 +125,6 @@ cd embassy-stm32-starter
 ./setup nucleo                   # Configure board
 cargo run --bin example          # Build and flash
 ```
-
-## 📡 Communication
-
-HDLC protocol with commands: `Ack`, `Nak`, `Ping`, `Raw`. Enable CRC-16: `--features hdlc_fcs`
-
-### Adding New Boards
-
-To support a new STM32 board:
-
-1. **Create board config**: Add `src/board/your_board.rs` following existing patterns
-2. **Update templates**: Add board option to template substitution in `setup` script
-3. **Test configuration**: Verify memory layout and pin assignments
-4. **Document**: Update supported boards table in README
-
-### Code Organization Guidelines
-
-- **Hardware layer**: Board-agnostic utilities in `src/hardware/`
-- **Board layer**: MCU-specific code in `src/board/`
-- **Service layer**: High-level functionality in `src/service/`
-- **Protocol layer**: Communication protocols in `src/protocol/`
-- **Application layer**: Binary executables in `src/bin/`
 
 ## 📁 Project Structure
 
@@ -218,120 +183,22 @@ embassy-stm32-starter/
     └── .vscode/launch.template.json  # Debug config template
 ```
 
-### Key Modules
-
-#### Hardware Layer (`src/hardware/`)
-
-- **`flash.rs`**: Direct STM32F4 register access, bypassing embassy-stm32 v0.4.0 flash bugs, conditional compilation by MCU family
-- **`gpio.rs`**: LED control (`LedControl`) and button reading (`ButtonReader`) utilities
-- **`hardfault.rs`**: Exception handling with automatic system reset on crashes, debug register logging
-- **`serial.rs`**: DMA-based UART with idle interrupt detection, async RX tasks
-- **`timers.rs`**: Timing constants and async delay helpers, watchdog feed intervals
-
-#### Service Layer (`src/service/`)
-
-- **`comm.rs`**: High-level message API with HDLC framing, command handling
-
-#### Protocol Layer (`src/protocol/`)
-
-- **`hdlc.rs`**: Low-level HDLC frame encoding/decoding with optional CRC-16
-
-#### Common Tasks (`src/common/`)
-
-- **`tasks.rs`**: Reusable Embassy tasks for LED blinking, button monitoring, RTC clock
-
-#### Board Configurations (`src/board/`)
-
-- **`base.rs`**: Common traits (`BoardConfiguration`, `InterruptHandlers`)
-- **`nucleo_f446re.rs`**: STM32F446RE-specific initialization and pin mappings
-- **`nucleo144_f413zh.rs`**: STM32F413ZH-specific initialization and pin mappings
-
-## 🛠️ Setup
-
-### Prerequisites
-
-1. **Rust Toolchain** (1.70.0 or later)
-
-   ```bash
-   # Install Rust
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source ~/.cargo/env
-
-   # Add ARM Cortex-M target
-   rustup target add thumbv7em-none-eabihf
-   ```
-
-2. **Probe-rs** (Hardware interface tool)
-
-   ```bash
-   # Install probe-rs for flashing and debugging
-   cargo install probe-rs-tools --features cli
-
-   # Verify installation
-   probe-rs list
-   ```
-
-3. **ARM GCC Toolchain** (For some build dependencies)
-
-   ```bash
-   # macOS
-   brew install arm-none-eabi-gcc
-
-   # Ubuntu/Debian
-   sudo apt install gcc-arm-none-eabi
-
-   # Arch Linux
-   sudo pacman -S arm-none-eabi-gcc
-   ```
-
 ## 🚀 Usage
-
-### Quick Start
-
-```bash
-# Clone the project
-git clone <repository-url>
-cd embassy-stm32-starter
-
-# Configure for your board (defaults to STM32F446RE Nucleo)
-./setup nucleo                    # STM32F446RE Nucleo-64
-# OR
-./setup nucleo144                 # STM32F413ZH Nucleo-144
-
-# Build the project
-cargo build --bin example
-
-# Flash and run with RTT logging
-cargo run --bin example
-```
-
-### Example Application Features
-
-The included `example` binary demonstrates:
-
-- **LED Blinking**: Async task with configurable blink rates
-- **Button Monitoring**: Debounced button state detection with logging
-- **RTC Clock**: Real-time clock display with timestamp logging
-- **Serial Communication**: HDLC message handling with ping/echo responses
-- **Watchdog**: Periodic watchdog feeding from main loop
 
 ### Available Commands
 
 ```bash
-# Build commands
-cargo build --bin example         # Build example binary
-cargo check                      # Quick syntax check
-cargo cb                         # Alias for clean
-cargo bx example                 # Alias for build --bin example
+# Configure for your board (defaults to STM32F446RE Nucleo)
+./setup nucleo                    # STM32F446RE Nucleo-64
+# OR
+./setup nucleo144                 # STM32F413ZH Nucleo-144
+```
 
+```bash
 # Run commands
 cargo run --bin example          # Flash and run with RTT logs
-cargo start example              # Alias for run --bin example
-
 # Test commands
-cargo test --test integration    # Run hardware tests
-cargo test --test flash          # Run flash storage tests
-cargo tests                     # Alias for test --test integration
+cargo test --test <file>         # Run test
 ```
 
 ## 📡 Communication Protocol
@@ -359,71 +226,15 @@ Message Payload (9-byte header + data):
 | `Ping`  | 0x03  | Ping request/response   |
 | `Raw`   | 0x04  | Raw data transfer       |
 
-### Flash Storage
+## 💾 Flash Storage
 
 Each board uses a dedicated flash sector for persistent storage with **direct register access** to bypass embassy-stm32 v0.4.0 flash driver bugs:
-
-- **STM32F446RE**: Sector (128KB size) - `FLASH_BASE: 0x4002_3C00`
-- **STM32F413ZH**: Sector (128KB size) - `FLASH_BASE: 0x4002_3C00`
 
 #### Key Features:
 
 - **Embassy Bug Workaround**: Direct STM32F4 register manipulation bypassing divide-by-zero in embassy flash driver
 - **Conditional Compilation**: MCU-specific `FLASH_BASE` addresses via cargo features (`stm32f446`, `stm32f413`)
 - **Auto-erase Strategy**: Hardware erase when flash contains data (0xFF writes don't work due to flash physics)
-
-> **⚠️ Flash Pattern**: Demo writes 8-byte patterns throughout entire 128KB storage region. Clean flash (0xFF) → writes data. Dirty flash → erases for next boot. Flash can only change bits 1→0 without erase.
-
-**API:** `flash::erase()` | `flash::write_block()` | `flash::read_block()` | `flash::start()` | `flash::end()`
-
-#### **HardFault Auto-Reset**
-
-- **Crash Detection**: Captures CPU state on crashes (null pointer, invalid memory, stack overflow)
-
-#### **Recovery Flow**
-
-```
-Normal: Main Loop → Pet Watchdog (250ms) → Continue → Pet Watchdog...
-Hang:   Main Loop Hangs → Watchdog Timeout (1s) → Hardware Reset → Restart
-Crash:  HardFault → Log Crash Info → Software Reset → Restart
-```
-
-Both systems ensure the MCU automatically recovers from any software or hardware failure without manual intervention.
-
-### Feature Flags
-
-#### **Protocol Features**
-
-```bash
-# Enable HDLC CRC-16 verification (enabled by default)
-cargo build --features hdlc_fcs
-cargo run --features hdlc_fcs --bin example
-```
-
-- **`hdlc_fcs` OFF**: Frames include 2-byte trailer, no verification
-- **`hdlc_fcs` ON (default)**: PPP/HDLC 16-bit CRC (poly 0x8408) appended and verified
-
-#### **MCU Family Features** (Conditional Compilation)
-
-```bash
-# STM32F446RE build (default)
-cargo build --features stm32f446
-
-# STM32F413ZH build
-cargo build --features stm32f413
-```
-
-- **`stm32f446`**: STM32F446RE family - 512KB flash, Nucleo-64 pin mappings
-- **`stm32f413`**: STM32F413ZH family - 1536KB flash, Nucleo-144 pin mappings
-
-Features automatically set by `./setup` script based on selected board configuration.
-
-## 🧪 Testing
-
-```bash
-cargo test --test integration    # Hardware-in-the-loop tests
-cargo test --test flash          # Flash storage configuration tests
-```
 
 ## 📄 License
 
