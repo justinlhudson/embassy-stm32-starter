@@ -1,9 +1,4 @@
-// Board configuration for STM32 Nucleo-64 Deve  /// Flash storage region: Use sector 3 (16KB sector of STM32F446RE)
-/// STM32F446RE flash layout: Sectors 0-3 (16KB each), Sector 4 (64KB), Sectors 5-7 (128KB each)  
-/// Using sector 3: 48KB to 64KB from flash base (should be safe for testing)
-pub const FLASH_STORAGE_START: u32 = 0x0800C000; // Start of sector 3 (48KB from base)
-pub const FLASH_STORAGE_END: u32 = 0x08010000; // End of sector 3 (64KB from base)
-pub const FLASH_STORAGE_SIZE: usize = 16 * 1024; // 16KB - size of sector 3t Board with STM32F446RE
+// Board configuration for STM32 Nucleo-64 Development Board with STM32F446RE
 //
 // Board specifications:
 // - STM32F446RE MCU (ARM Cortex-M4F @ 180 MHz)

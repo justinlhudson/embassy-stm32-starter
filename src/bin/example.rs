@@ -37,7 +37,7 @@ async fn main(_spawner: Spawner) {
   _spawner.spawn(rtc_clock(rtc)).ok();
   _spawner.spawn(comm_task(comm, led)).ok();
 
-  info!("U ready? U an't ready!");
+  info!("U ready? U ain't ready!");
   let mut last_sp: u32 = 0;
   loop {
     // Print stack usage in KB only if changed
@@ -52,7 +52,7 @@ async fn main(_spawner: Spawner) {
       last_sp = sp;
     }
 
-    wdt.pet(); // if got no data pet the dog
+    wdt.pet();
     Timing::delay_ms(Timing::WATCHDOG_PET_MS).await;
   }
 }
