@@ -8,9 +8,9 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 
 - 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64) and STM32F413ZH (Nucleo-144)
 - 🔄 **One-Command Setup**: Automatic board configuration with `./setup nucleo`
-- 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16
-- 💾 **Flash Storage**: Direct register access with embassy-stm32 v0.4.0 bug workarounds
-- 🛡️ **Auto-Recovery**: Hardware watchdog + hardfault auto-reset for crash protection
+- 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16 (see [embedded-serial-bridge](https://github.com/justinlhudson/embedded-serial-bridge))
+- 💾 **Flash Storage**: Direct register access
+- 🛡️ **Auto-Recovery**: Hard fault auto-reset for crash protection
 - ⚡ **Async Tasks**: LED, button, RTC, and communication handling
 - 🏗️ **Conditional Compilation**: MCU-specific features via cargo flags
 - 🔧 **VS Code Ready**: Pre-configured debugging and IntelliSense
@@ -18,15 +18,9 @@ A modern async embedded Rust project template using the **Embassy framework** fo
 
 ## 🏗️ Architecture & Configuration
 
-## 🧩 Heapless Design
+### 🧩 Heapless Design
 
-This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynamic data structures, such as `heapless::Vec`. This means:
-
-- **No dynamic heap allocation**: All collections have fixed, compile-time capacities and are allocated on the stack or in static memory.
-- **Deterministic memory usage**: Maximum RAM usage is known at compile time, with no risk of heap fragmentation or allocation failures at runtime.
-- **Embedded-friendly**: Suitable for microcontrollers and real-time systems where dynamic allocation is discouraged or unavailable.
-
-As a result, reported heap usage is always zero unless a dynamic allocator is added. All memory usage comes from stack and statically allocated buffers.
+This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynamic data structures, such as `heapless::Vec`.
 
 ### Supported Boards
 
@@ -94,7 +88,7 @@ embassy-stm32-starter/
 
 ## 🚀 Usage
 
-### Some Available Commands
+### Commands
 
 ```bash
 # Configure for your board (defaults to STM32F446RE Nucleo)
@@ -114,7 +108,7 @@ cargo test --test <file>         # Run test
 
 ### HDLC Message Format
 
-The project implements a custom message protocol over HDLC framing:
+The project implements a custom message protocol over HDLC framing (see [embedded-serial-bridge](https://github.com/justinlhudson/embedded-serial-bridge) for PC client implementation):
 
 ```
 HDLC Frame: [0x7E] [Escaped Payload] [Escaped CRC-16] [0x7E]
@@ -126,7 +120,7 @@ Message Payload (9-byte header + data):
 └─────────┴─────┴───────────┴──────────┴────────┴─────────────┘
 ```
 
-### Commands
+### Commands (initial)
 
 | Command | Value | Description             |
 | ------- | ----- | ----------------------- |
@@ -137,11 +131,10 @@ Message Payload (9-byte header + data):
 
 ## 💾 Flash Storage
 
-Each board uses a dedicated flash sector for persistent storage with **direct register access** to bypass embassy-stm32 v0.4.0 flash driver bugs:
+Each board uses a dedicated flash sector for persistent storage with **direct register access**.
 
 #### Key Features:
 
-- **Embassy Bug Workaround**: Direct STM32F4 register manipulation bypassing divide-by-zero in embassy flash driver
 - **Conditional Compilation**: MCU-specific `FLASH_BASE` addresses via cargo features (`stm32f446`, `stm32f413`)
 - **Auto-erase Strategy**: Hardware erase when flash contains data (0xFF writes don't work due to flash physics)
 
