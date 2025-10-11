@@ -13,9 +13,9 @@ fn main() -> ! {
   info!("Flash test starting...");
 
   // Test flash storage configuration constants
-  let start = flash::storage_start();
-  let end = flash::storage_end();
-  let size = flash::storage_size();
+  let start = flash::start();
+  let end = flash::end();
+  let size = (end - start) as usize;
 
   info!("Flash storage region:");
   info!("  Start: 0x{:08X}", start);
@@ -58,7 +58,7 @@ fn main() -> ! {
 
       let test_data: [u8; 16] = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00];
 
-      match flash::write_direct(start, &test_data) {
+      match flash::write_block(start, &test_data) {
         Ok(()) => {
           info!("✅ Direct write workaround test PASSED");
 

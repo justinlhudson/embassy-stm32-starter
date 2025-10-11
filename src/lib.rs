@@ -15,6 +15,7 @@ pub use embassy_time::Timer; // re-export embassy time for convenience
 pub mod hardware {
   pub mod flash;
   pub mod gpio;
+  pub mod hardfault;
   pub mod serial;
   pub mod timers;
   pub use flash::*;
@@ -63,5 +64,3 @@ macro_rules! validate_board_config {
     };
   };
 }
-
-pub mod hardfault;

@@ -2,15 +2,17 @@
 
 > **✨ Magic Setup:** Instantly switch between supported STM32 boards and auto-configure your project with a single command: `./setup <board>`. The setup script updates all configs, linker scripts, and VS Code debug settings for you!
 
-A modern async embedded Rust project template using the **Embassy framework** for STM32 microcontrollers. Features **automatic multi-board configuration**, HDLC communication, and comprehensive hardware abstraction.
+A modern async embedded Rust project template using the **Embassy framework** for STM32 microcontrollers. Features **automatic multi-board configuration**, HDLC communication, comprehensive hardware abstraction, and **automatic crash recovery**.
 
 ## ✨ Features
 
 - 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64) and STM32F413ZH (Nucleo-144)
 - 🔄 **One-Command Setup**: Automatic board configuration with `./setup nucleo`
 - 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16
-- 💾 **Flash Storage**: Auto-erase strategy with embassy-stm32 bug workarounds
+- 💾 **Flash Storage**: Direct register access with embassy-stm32 v0.4.0 bug workarounds
+- 🛡️ **Auto-Recovery**: Hardware watchdog + hardfault auto-reset for crash protection
 - ⚡ **Async Tasks**: LED, button, RTC, and communication handling
+- 🏗️ **Conditional Compilation**: MCU-specific features via cargo flags
 - 🔧 **VS Code Ready**: Pre-configured debugging and IntelliSense
 - ✅ **Hardware Testing**: Integration tests on real hardware
 
@@ -30,10 +32,10 @@ As a result, reported heap usage is always zero unless a dynamic allocator is ad
 
 ### Supported Boards
 
-| Board          | MCU         | Flash  | RAM   | Serial | LED | Button |
-| -------------- | ----------- | ------ | ----- | ------ | --- | ------ |
-| **Nucleo-64**  | STM32F446RE | 512KB  | 128KB | USART2 | PA5 | PC13   |
-| **Nucleo-144** | STM32F413ZH | 1536KB | 320KB | USART3 | PB0 | PC13   |
+| Board          | MCU         | Flash  | RAM   | Serial | LED | Button | Flash Storage  |
+| -------------- | ----------- | ------ | ----- | ------ | --- | ------ | -------------- |
+| **Nucleo-64**  | STM32F446RE | 512KB  | 128KB | USART2 | PA5 | PC13   | Sector (128KB) |
+| **Nucleo-144** | STM32F413ZH | 1536KB | 320KB | USART3 | PB0 | PC13   | Sector (128KB) |
 
 ### Quick Setup
 
@@ -46,13 +48,16 @@ As a result, reported heap usage is always zero unless a dynamic allocator is ad
 cargo run --bin example
 ```
 
-The setup script automatically configures `Cargo.toml`, `memory.x`, `board.rs`, `.cargo/config.toml`, and VS Code debugging for the selected board.
+The setup script automatically configures `Cargo.toml`, `memory.x`, `board.rs`, `.cargo/config.toml`, and VS Code debugging for the selected board with **conditional compilation support**.
 
 ### Core Components
 
-- **Embassy Framework**: Async/await runtime for embedded systems
-- **HDLC Protocol**: Reliable serial communication with frame detection
+- **Embassy Framework**: Async/await runtime for embedded systems with v0.4.0 compatibility
+- **HDLC Protocol**: Reliable serial communication with frame detection and CRC-16
+- **Flash Storage**: Direct STM32F4 register access bypassing embassy flash bugs
+- **Auto-Recovery**: Hardware watchdog (1s timeout) + hardfault reset for crash protection
 - **Task Management**: LED blinking, button monitoring, RTC clock, communication handling
+- **Conditional Compilation**: MCU family features (`stm32f446`, `stm32f413`) for targeted builds
 - **Template System**: Automated configuration for different MCU targets
 - **Hardware Abstraction**: Board-agnostic interfaces for common peripherals
 
@@ -186,8 +191,9 @@ embassy-stm32-starter/
 │   │   └── nucleo144_f413zh.rs       # STM32F413ZH Nucleo-144 config
 │   │
 │   ├── 📂 hardware/                  # 🔧 Hardware Abstraction Layer
-│   │   ├── flash.rs                  # Flash storage read/write operations
+│   │   ├── flash.rs                  # Flash storage with direct register access
 │   │   ├── gpio.rs                   # LED/button control utilities
+│   │   ├── hardfault.rs              # Exception handling & auto-reset functionality
 │   │   ├── serial.rs                 # UART with DMA + idle detection
 │   │   └── timers.rs                 # Timing constants & async delays
 │   │
@@ -216,10 +222,11 @@ embassy-stm32-starter/
 
 #### Hardware Layer (`src/hardware/`)
 
-- **`flash.rs`**: Flash storage operations with direct register access, auto-erase functionality, and embassy-stm32 bug workarounds
+- **`flash.rs`**: Direct STM32F4 register access, bypassing embassy-stm32 v0.4.0 flash bugs, conditional compilation by MCU family
 - **`gpio.rs`**: LED control (`LedControl`) and button reading (`ButtonReader`) utilities
+- **`hardfault.rs`**: Exception handling with automatic system reset on crashes, debug register logging
 - **`serial.rs`**: DMA-based UART with idle interrupt detection, async RX tasks
-- **`timers.rs`**: Timing constants and async delay helpers (`TimingUtils`)
+- **`timers.rs`**: Timing constants and async delay helpers, watchdog feed intervals
 
 #### Service Layer (`src/service/`)
 
@@ -339,7 +346,7 @@ HDLC Frame: [0x7E] [Escaped Payload] [Escaped CRC-16] [0x7E]
 Message Payload (9-byte header + data):
 ┌─────────┬─────┬───────────┬──────────┬────────┬─────────────┐
 │ Command │ ID  │ Fragments │ Fragment │ Length │   Payload   │
-│ (u16)   │(u8) │   (u16)   │  (u16)   │ (u16)  │ (0-256 bytes)│
+│ (u16)   │(u8) │   (u16)   │  (u16)   │ (u16)  │(0-256 bytes)│
 └─────────┴─────┴───────────┴──────────┴────────┴─────────────┘
 ```
 
@@ -354,16 +361,38 @@ Message Payload (9-byte header + data):
 
 ### Flash Storage
 
-Each board uses a dedicated flash sector for persistent storage:
+Each board uses a dedicated flash sector for persistent storage with **direct register access** to bypass embassy-stm32 v0.4.0 flash driver bugs:
 
-- **STM32F446RE**: Sector 6 (256KB-384KB, 128KB size)
-- **STM32F413ZH**: Last sector (1408KB-1536KB, 128KB size)
+- **STM32F446RE**: Sector (128KB size) - `FLASH_BASE: 0x4002_3C00`
+- **STM32F413ZH**: Sector (128KB size) - `FLASH_BASE: 0x4002_3C00`
 
-> **⚠️ Flash Pattern**: Demo alternates write→erase cycles. Clean flash (0xFF) → writes data. Dirty flash → erases for next boot. Each flash location is write-once until erased.
+#### Key Features:
 
-**API:** `flash::erase_flash_sector()` | `flash::write_direct()` | `flash::read_block()`
+- **Embassy Bug Workaround**: Direct STM32F4 register manipulation bypassing divide-by-zero in embassy flash driver
+- **Conditional Compilation**: MCU-specific `FLASH_BASE` addresses via cargo features (`stm32f446`, `stm32f413`)
+- **Auto-erase Strategy**: Hardware erase when flash contains data (0xFF writes don't work due to flash physics)
+
+> **⚠️ Flash Pattern**: Demo writes 8-byte patterns throughout entire 128KB storage region. Clean flash (0xFF) → writes data. Dirty flash → erases for next boot. Flash can only change bits 1→0 without erase.
+
+**API:** `flash::erase()` | `flash::write_block()` | `flash::read_block()` | `flash::start()` | `flash::end()`
+
+#### **HardFault Auto-Reset**
+
+- **Crash Detection**: Captures CPU state on crashes (null pointer, invalid memory, stack overflow)
+
+#### **Recovery Flow**
+
+```
+Normal: Main Loop → Pet Watchdog (250ms) → Continue → Pet Watchdog...
+Hang:   Main Loop Hangs → Watchdog Timeout (1s) → Hardware Reset → Restart
+Crash:  HardFault → Log Crash Info → Software Reset → Restart
+```
+
+Both systems ensure the MCU automatically recovers from any software or hardware failure without manual intervention.
 
 ### Feature Flags
+
+#### **Protocol Features**
 
 ```bash
 # Enable HDLC CRC-16 verification (enabled by default)
@@ -373,6 +402,21 @@ cargo run --features hdlc_fcs --bin example
 
 - **`hdlc_fcs` OFF**: Frames include 2-byte trailer, no verification
 - **`hdlc_fcs` ON (default)**: PPP/HDLC 16-bit CRC (poly 0x8408) appended and verified
+
+#### **MCU Family Features** (Conditional Compilation)
+
+```bash
+# STM32F446RE build (default)
+cargo build --features stm32f446
+
+# STM32F413ZH build
+cargo build --features stm32f413
+```
+
+- **`stm32f446`**: STM32F446RE family - 512KB flash, Nucleo-64 pin mappings
+- **`stm32f413`**: STM32F413ZH family - 1536KB flash, Nucleo-144 pin mappings
+
+Features automatically set by `./setup` script based on selected board configuration.
 
 ## 🧪 Testing
 

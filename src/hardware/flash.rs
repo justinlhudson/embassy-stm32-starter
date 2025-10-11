@@ -41,17 +41,18 @@ const FLASH_CR_LOCK: u32 = 1 << 31; // Lock
 const FLASH_SR_BSY: u32 = 1 << 16; // Busy flag
 
 /// The start address of the storage region (last sector)
-pub fn storage_start() -> u32 {
+pub fn start() -> u32 {
   BoardConfig::FLASH_STORAGE_START
 }
 
-pub fn storage_end() -> u32 {
+/// The end address of the storage region
+pub fn end() -> u32 {
   BoardConfig::FLASH_STORAGE_END
 }
 
 /// Read a block of data from flash storage
 pub fn read_block(offset: usize, buf: &mut [u8]) -> Result<(), Error> {
-  let addr = storage_start() + offset as u32;
+  let addr = start() + offset as u32;
   let flash_ptr = addr as *const u8;
   unsafe {
     ptr::copy_nonoverlapping(flash_ptr, buf.as_mut_ptr(), buf.len());
@@ -102,8 +103,8 @@ pub fn erase_sector_direct(sector_addr: u32) -> Result<(), Error> {
   Ok(())
 }
 
-/// Alternative write using direct register access (workaround for embassy-stm32 v0.4.0 bug)
-pub fn write_direct(addr: u32, data: &[u8]) -> Result<(), Error> {
+/// Write a block of data to flash using direct register access (workaround for embassy-stm32 v0.4.0 bug)
+pub fn write_block(addr: u32, data: &[u8]) -> Result<(), Error> {
   defmt::info!("Direct write {} bytes to address: 0x{:08X}", data.len(), addr);
 
   // STM32F4 supports byte programming, so no strict alignment required
@@ -212,13 +213,13 @@ fn get_sector_number(addr: u32) -> Result<u32, Error> {
   }
 }
 
-/// Flash sector erase function
+/// Erase the flash storage sector
 /// WARNING: This may cause system reset when executed from flash!
-pub async fn erase_flash_sector() -> Result<(), Error> {
+pub async fn erase() -> Result<(), Error> {
   defmt::info!("🔥 Flash Sector Erase");
   defmt::info!("⚠️  WARNING: This will erase flash sector and may cause system reset!");
 
-  let storage_start = storage_start();
+  let storage_start = start();
   defmt::info!("Erasing flash sector at address: 0x{:08X}", storage_start);
 
   match erase_sector_direct(storage_start) {

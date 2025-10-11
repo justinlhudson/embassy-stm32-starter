@@ -98,12 +98,12 @@ async fn flash_demo() {
   if buffer[0..4].iter().all(|&b| b == 0xFF) {
     // Flash is clean - write test data
     let data = [0x12, 0x34, 0x56, 0x78];
-    flash::write_direct(flash::storage_start(), &data).unwrap();
+    flash::write_block(flash::start(), &data).unwrap();
     info!("✅ Successfully wrote {:?} to clean flash", data);
   } else {
     // Flash has data - erase it for next boot
     info!("⚠️  Flash contains data - erasing for next boot");
-    flash::erase_flash_sector().await.unwrap();
+    flash::erase().await.unwrap();
     info!("🔄 Flash erased! On next boot, demo will write to clean flash");
   }
 }
