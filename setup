@@ -41,24 +41,18 @@ fi
 # Configure based on board selection
 case "$BOARD" in
     "nucleo"|"nucleo-f446re")
-    BOARD_CONFIG="src/board/nucleo_f446re.rs"
-        BOARD_DESCRIPTION="STM32F446RE Nucleo board"
-        BOARD_NAME="STM32F446RE Nucleo board"
         MCU_NAME="STM32F446RE"
-        CHIP_NAME="STM32F446RE"
+        BOARD_TYPE="Nucleo"
         BOARD_CONFIG_FILE="nucleo_f446re.rs"
-        STM32_HAL_FEATURE="stm32f446"
-        STM32_EMBASSY_FEATURE="stm32f446re"
+        STM32_FAMILY="stm32f446"
+        STM32_MCU="stm32f446re"
         ;;
     "nucleo144"|"nucleo-144"|"nucleo144-f413zh")
-    BOARD_CONFIG="src/board/nucleo144_f413zh.rs"
-        BOARD_DESCRIPTION="STM32F413ZH Nucleo-144 board"
-        BOARD_NAME="STM32F413ZH Nucleo-144 board"
         MCU_NAME="STM32F413ZH"
-        CHIP_NAME="STM32F413ZH"
+        BOARD_TYPE="Nucleo-144"
         BOARD_CONFIG_FILE="nucleo144_f413zh.rs"
-        STM32_HAL_FEATURE="stm32f413"
-        STM32_EMBASSY_FEATURE="stm32f413zh"
+        STM32_FAMILY="stm32f413"
+        STM32_MCU="stm32f413zh"
         ;;
     *)
         echo "❌ Unknown board: $BOARD"
@@ -66,6 +60,12 @@ case "$BOARD" in
         exit 1
         ;;
 esac
+
+# Derive other variables from core settings
+CHIP_NAME="$MCU_NAME"                                    # Same as MCU name
+BOARD_NAME="$MCU_NAME $BOARD_TYPE board"                 # "STM32F446RE Nucleo board"
+BOARD_DESCRIPTION="$MCU_NAME $BOARD_TYPE board"          # Same as board name
+BOARD_CONFIG="src/board/$BOARD_CONFIG_FILE"              # Full path to config file
 
 # Function to substitute template variables
 substitute_template() {
@@ -81,8 +81,8 @@ substitute_template() {
     sed -e "s/{{BOARD_DESCRIPTION}}/$BOARD_DESCRIPTION/g" \
         -e "s/{{CHIP_NAME}}/$CHIP_NAME/g" \
         -e "s/{{BOARD_CONFIG_FILE}}/$BOARD_CONFIG_FILE/g" \
-        -e "s/{{STM32_HAL_FEATURE}}/$STM32_HAL_FEATURE/g" \
-        -e "s/{{STM32_EMBASSY_FEATURE}}/$STM32_EMBASSY_FEATURE/g" \
+        -e "s/{{STM32_FAMILY}}/$STM32_FAMILY/g" \
+        -e "s/{{STM32_MCU}}/$STM32_MCU/g" \
         "$template_file" > "$output_file"
     
     return 0

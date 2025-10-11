@@ -1,17 +1,28 @@
 // Simple flash storage for STM32 using last sector
 /// Provides block read/write APIs for persistent storage
-use embassy_stm32::bind_interrupts;
-bind_interrupts!(pub struct IrqsFlash {
-  FLASH => embassy_stm32::flash::InterruptHandler;
-});
-
 use crate::board::BoardConfig;
 use core::ptr;
-use embassy_stm32::flash::{Error, Flash};
+use embassy_stm32::flash::Error;
 
-// Direct flash operations using register addresses (STM32F4 reference manual)
-// Flash register base addresses for STM32F4xx series
+// Direct flash operations using register addresses (STM32 reference manual)
+// Flash register base addresses - conditional compilation based on MCU family
+
+#[cfg(any(feature = "stm32f446", feature = "stm32f413"))]
+const FLASH_BASE: u32 = 0x40023C00; // STM32F4xx series
+
+#[cfg(feature = "stm32f1")]
+const FLASH_BASE: u32 = 0x40022000; // STM32F1xx series
+
+#[cfg(feature = "stm32f0")]
+const FLASH_BASE: u32 = 0x40022000; // STM32F0xx series
+
+#[cfg(feature = "stm32h7")]
+const FLASH_BASE: u32 = 0x52002000; // STM32H7xx series
+
+// Default fallback for STM32F4 family if no specific feature is set
+#[cfg(not(any(feature = "stm32f446", feature = "stm32f413", feature = "stm32f1", feature = "stm32f0", feature = "stm32h7")))]
 const FLASH_BASE: u32 = 0x40023C00;
+
 const FLASH_KEYR: u32 = FLASH_BASE + 0x04;
 const FLASH_SR: u32 = FLASH_BASE + 0x0C;
 const FLASH_CR: u32 = FLASH_BASE + 0x10;
@@ -33,61 +44,19 @@ const FLASH_SR_BSY: u32 = 1 << 16; // Busy flag
 pub fn storage_start() -> u32 {
   BoardConfig::FLASH_STORAGE_START
 }
-pub fn storage_size() -> usize {
-  BoardConfig::FLASH_STORAGE_SIZE
-}
+
 pub fn storage_end() -> u32 {
   BoardConfig::FLASH_STORAGE_END
-}
-
-/// Write a block of data to flash storage
-pub async fn write_block(flash: &mut Flash<'_>, offset: usize, data: &[u8]) -> Result<(), Error> {
-  let addr = storage_start() + offset as u32;
-  let end_addr = addr + data.len() as u32;
-  if end_addr > storage_end() {
-    defmt::error!("Attempt to write past end of storage: addr=0x{:08X}, end=0x{:08X}", addr, end_addr);
-    return Err(Error::Size);
-  }
-  flash.write(addr, data).await
 }
 
 /// Read a block of data from flash storage
 pub fn read_block(offset: usize, buf: &mut [u8]) -> Result<(), Error> {
   let addr = storage_start() + offset as u32;
-  let end_addr = addr + buf.len() as u32;
-  if end_addr > storage_end() {
-    defmt::error!("Attempt to read past end of storage: addr=0x{:08X}, end=0x{:08X}", addr, end_addr);
-    return Err(Error::Size);
-  }
   let flash_ptr = addr as *const u8;
   unsafe {
     ptr::copy_nonoverlapping(flash_ptr, buf.as_mut_ptr(), buf.len());
   }
   Ok(())
-}
-
-/// Erase the storage region (entire last sector)
-pub async fn erase_blocks(flash: &mut Flash<'_>) -> Result<(), embassy_stm32::flash::Error> {
-  let start = storage_start();
-  let end = storage_end();
-  flash.erase(start, end).await
-}
-
-/// Try small page-aligned erase operation (workaround attempt)
-pub async fn erase_small_block(flash: &mut Flash<'_>, offset: usize, size: usize) -> Result<(), embassy_stm32::flash::Error> {
-  let start = storage_start() + offset as u32;
-  let end = start + size as u32;
-
-  // Ensure we don't go past our allocated region
-  if end > storage_end() {
-    defmt::error!("Erase operation would exceed storage bounds");
-    return Err(embassy_stm32::flash::Error::Size);
-  }
-
-  defmt::info!("Attempting small erase: 0x{:08X} to 0x{:08X} ({} bytes)", start, end, size);
-
-  // Try with a very small, page-aligned region first
-  flash.erase(start, end).await
 }
 
 /// Direct flash erase using register manipulation (workaround for embassy-stm32 v0.4.0 bug)
@@ -130,44 +99,6 @@ pub fn erase_sector_direct(sector_addr: u32) -> Result<(), Error> {
   }
 
   defmt::info!("✅ Direct sector erase completed");
-  Ok(())
-}
-
-/// Soft erase by writing 0xFF bytes (safer alternative to sector erase)
-pub fn soft_erase_region(size: usize) -> Result<(), Error> {
-  defmt::info!("Soft erase: writing {} bytes of 0xFF to storage region", size);
-
-  // Create buffer filled with 0xFF (erased state)
-  let erase_buffer = [0xFFu8; 256]; // Use chunks of 256 bytes max
-  let storage_addr = storage_start();
-  let max_size = storage_size();
-
-  if size > max_size {
-    defmt::error!("Soft erase size {} exceeds storage region {}", size, max_size);
-    return Err(Error::Size);
-  }
-
-  let mut remaining = size;
-  let mut current_addr = storage_addr;
-
-  while remaining > 0 {
-    let chunk_size = if remaining > erase_buffer.len() { erase_buffer.len() } else { remaining };
-
-    defmt::debug!("Soft erasing chunk: {} bytes at 0x{:08X}", chunk_size, current_addr);
-
-    match write_direct(current_addr, &erase_buffer[..chunk_size]) {
-      Ok(()) => {
-        current_addr += chunk_size as u32;
-        remaining -= chunk_size;
-      }
-      Err(e) => {
-        defmt::error!("Soft erase failed at address 0x{:08X}", current_addr);
-        return Err(e);
-      }
-    }
-  }
-
-  defmt::info!("✅ Soft erase completed: {} bytes", size);
   Ok(())
 }
 

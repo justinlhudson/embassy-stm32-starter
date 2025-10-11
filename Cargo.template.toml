@@ -24,11 +24,11 @@ defmt = ">=1.0.1"
 defmt-rtt = ">=1.0.0"
 panic-probe = { version = ">=1.0.0", features = ["print-defmt"] }
 chrono = { version = ">=0.4.41", default-features = false }
-stm32f4xx-hal = { version = "0.22.1", features = ["{{STM32_HAL_FEATURE}}"] }
-# stm32f1xx-hal = { version = ">=0.11.0", features = ["{{STM32_HAL_FEATURE}}]}  # stm32f103"
+stm32f4xx-hal = { version = "0.22.1", features = ["{{STM32_FAMILY}}"] }
+# stm32f1xx-hal = { version = ">=0.11.0", features = ["{{STM32_FAMILY}}]}  # stm32f103"
 embassy-stm32 = { version = ">=0.4.0", features = [
   "defmt",
-  "{{STM32_EMBASSY_FEATURE}}",
+  "{{STM32_MCU}}",
   "memory-x",
   "time-driver-tim4",
   "exti",
@@ -67,9 +67,19 @@ harness = false
 semihosting = ">=0.1.20" # for tests only
 
 [features]
-default = ["hdlc_fcs"] # include HDLC FCS by default
+default = [
+  "hdlc_fcs",
+  "{{STM32_FAMILY}}",
+] # include HDLC FCS and MCU feature by default
 # default = []           # if you don't want HDLC FCS by default
 hdlc_fcs = []
+
+# MCU family features for conditional compilation
+stm32f446 = [] # STM32F446RE (Nucleo-64)
+stm32f413 = [] # STM32F413ZH (Nucleo-144)
+stm32f1 = []   # STM32F1xx family (future)
+stm32f0 = []   # STM32F0xx family (future)
+stm32h7 = []   # STM32H7xx family (future)
 
 [profile.dev]
 opt-level = 0     # no optimizations
