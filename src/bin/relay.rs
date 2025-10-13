@@ -60,9 +60,17 @@ async fn operation_task(
         } else if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Raw) {
           if msg.payload.len() >= 2 && msg.payload[0] == 0xD8 {
             match msg.payload[1] {
-              1 => d8.set_high(),
-              0 => d8.set_low(),
-              _ => {}
+              1 => {
+                info!("D8 command: HIGH (from comms)");
+                d8.set_high()
+              }
+              0 => {
+                info!("D8 command: LOW (from comms)");
+                d8.set_low()
+              }
+              other => {
+                info!("D8 command: unknown value {} (ignored)", other);
+              }
             }
           }
         }
