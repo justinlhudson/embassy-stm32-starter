@@ -86,7 +86,30 @@ embassy-stm32-starter/
     └── .vscode/launch.template.json  # Debug config template
 ```
 
-## 🚀 Usage
+## � Applications
+
+This starter includes example applications demonstrating different use cases:
+
+### 🎯 `example` - Full Feature Demo
+
+Located in `src/bin/example.rs`, this comprehensive demo showcases all framework capabilities:
+
+- All async tasks (LED blinking, button handling, RTC)
+- Flash storage operations
+- HDLC communication protocol with message handling (Ping, Raw commands)
+- Integration with all hardware modules
+- Auto-recovery on HDLC FCS errors
+
+### 🔌 `relay` - GPIO Control & Communication
+
+Located in `src/bin/relay.rs`, a focused application derived from `example` for remote GPIO control:
+
+- **Button Control**: Toggle D8 output (PA9 on Nucleo-\*) using the onboard button
+- **Serial Control**: Control D8 via HDLC Raw commands (`0xD8 0x01` = HIGH, `0xD8 0x00` = LOW)
+
+Use `cargo run --bin relay` to flash and run the relay application.
+
+## �🚀 Usage
 
 ### Commands
 

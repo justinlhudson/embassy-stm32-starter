@@ -214,10 +214,13 @@ fn get_sector_number(addr: u32) -> Result<u32, Error> {
 }
 
 /// Erase the flash storage sector
-/// WARNING: This may cause system reset when executed from flash!
+/// WARNING: Executing a flash erase while running from flash can cause immediate MCU reset.
+/// The MCU may repeatedly reset and drop serial until the next successful start completes.
 pub async fn erase() -> Result<(), Error> {
   defmt::info!("🔥 Flash Sector Erase");
-  defmt::info!("⚠️  WARNING: This will erase flash sector and may cause system reset!");
+  defmt::warn!("===============================================================");
+  defmt::warn!("FLASH ERASE IN PROGRESS – MCU WILL RESET DURING THIS OPERATION");
+  defmt::warn!("===============================================================");
 
   let storage_start = start();
   defmt::info!("Erasing flash sector at address: 0x{:08X}", storage_start);
