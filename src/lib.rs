@@ -13,11 +13,13 @@ pub use embassy_time::Timer; // re-export embassy time for convenience
 
 // Hardware abstraction layer modules
 pub mod hardware {
+  pub mod adc;
   pub mod flash;
   pub mod gpio;
   pub mod hardfault;
   pub mod serial;
   pub mod timers;
+  pub use adc::*;
   pub use flash::*;
   pub use gpio::*;
   pub use serial::*;
