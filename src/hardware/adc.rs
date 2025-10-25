@@ -12,9 +12,6 @@
 use embassy_stm32::adc::{Adc, AdcChannel, Resolution, SampleTime};
 use embassy_stm32::peripherals::ADC1;
 
-#[allow(unused_imports)]
-use crate::prelude::*;
-
 /// ADC resolution configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdcResolution {
@@ -67,6 +64,11 @@ impl<'d> AdcReader<'d> {
   /// * `vref_mv` - Reference voltage in millivolts (default: 3300 mV for 3.3V)
   pub fn new(adc_peripheral: impl Into<embassy_stm32::Peri<'d, ADC1>>, resolution: AdcResolution, vref_mv: u16) -> Self {
     let mut adc = Adc::new(adc_peripheral.into());
+
+    // Warn if using non-standard reference voltage
+    if vref_mv != 3300 {
+      defmt::warn!("ADC reference voltage set to {} mV (not standard 3.3V). Verify your board's VREF+ connection!", vref_mv);
+    }
 
     // STM32F4 ADC is always 12-bit at hardware level
     adc.set_resolution(Resolution::BITS12);
