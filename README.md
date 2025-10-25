@@ -29,6 +29,14 @@ This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynam
 | **Nucleo-64**  | STM32F446RE | 512KB  | 128KB | USART2 | PA5 | PC13   | Sector (128KB) |
 | **Nucleo-144** | STM32F413ZH | 1536KB | 320KB | USART3 | PB0 | PC13   | Sector (128KB) |
 
+### 📊 ADC Support
+
+Both boards include 12-bit ADC with configurable resolution:
+
+- **12-bit mode**: Native hardware (0-4095)
+- **16-bit mode**: Scaled output (12-bit << 4) for compatibility
+- **Default pin**: PA0 (Arduino A0) - available on both boards
+
 ## 📁 Project Structure
 
 ```
@@ -59,6 +67,7 @@ embassy-stm32-starter/
 │   │   └── nucleo144_f413zh.rs       # STM32F413ZH Nucleo-144 config
 │   │
 │   ├── 📂 hardware/                  # 🔧 Hardware Abstraction Layer
+│   │   ├── adc.rs                    # ADC with 12/16-bit resolution
 │   │   ├── flash.rs                  # Flash storage with direct register access
 │   │   ├── gpio.rs                   # LED/button control utilities
 │   │   ├── hardfault.rs              # Exception handling & auto-reset functionality
@@ -76,7 +85,7 @@ embassy-stm32-starter/
 │
 ├── 🧪 tests/                         # Integration testing
 │   ├── integration.rs                # Hardware-in-the-loop tests
-│   └── flash.rs                      # Flash storage configuration tests
+│   └── ...                           # Other tests (yes, lazy sometimes none!)
 │
 └── 📋 Templates/                     # Configuration templates
     ├── Cargo.template.toml           # Cargo config template
@@ -123,9 +132,24 @@ Use `cargo run --bin relay` to flash and run the relay application.
 ```bash
 # Run commands
 cargo run --bin example          # Flash and run with RTT logs
-# Test commands
-cargo test --test <file>         # Run test
 ```
+
+## 🧪 Testing
+
+This is a `no_std` embedded project, so all tests are **integration tests** that run on the target hardware, not traditional unit tests. Tests use the same embedded runtime as the application binaries.
+
+**Available Tests:**
+
+- `integration.rs` - Hardware-in-the-loop tests for basic functionality
+- `...` - Other tests (yes, lazy sometimes none!)
+
+**Running Tests:**
+
+```bash
+cargo test --test integration    # Run integration test
+```
+
+**Note:** Tests must be flashed to the target hardware and run via a debug probe. They use `semihosting` to exit and report results.
 
 ## 📡 Communication Protocol
 

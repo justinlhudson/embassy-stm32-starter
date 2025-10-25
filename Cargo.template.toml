@@ -63,6 +63,10 @@ harness = false
 name = "flash"
 harness = false
 
+[[test]]
+name = "adc"
+harness = false
+
 [dev-dependencies]
 semihosting = ">=0.1.20" # for tests only
 

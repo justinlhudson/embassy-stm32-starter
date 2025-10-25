@@ -14,7 +14,7 @@ async fn main(spawner: Spawner) {
   info!("Board: {}", BoardConfig::BOARD_NAME);
 
   let p = embassy_stm32::init(Config::default());
-  let (led, button, mut wdt, _rtc, comm) = BoardConfig::init_all_hardware(spawner, p);
+  let (led, button, mut wdt, _rtc, comm, _adc, _adc_pin) = BoardConfig::init_all_hardware(spawner, p);
 
   // Create D8 output (Arduino D8 = PA9 on Nucleo-F446RE)
   let p2 = unsafe { embassy_stm32::Peripherals::steal() };
@@ -33,7 +33,7 @@ async fn operation_task(
   mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>,
   mut led: embassy_stm32::gpio::Output<'static>,
   mut d8: embassy_stm32::gpio::Output<'static>,
-  mut button: embassy_stm32::gpio::Input<'static>,
+  button: embassy_stm32::gpio::Input<'static>,
 ) {
   let mut last_fcs = 0u8;
   d8.set_low();

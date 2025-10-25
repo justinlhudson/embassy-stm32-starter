@@ -15,6 +15,14 @@
 // - User LED3 (LD3): PB14 (Red LED)
 // - User Button (B1): PC13 (Blue tactile button)
 //
+// ADC pins (Arduino connector):
+// - PA0: ADC1_IN0 (A0)
+// - PA1: ADC1_IN1 (A1)
+// - PA4: ADC1_IN4 (A2)
+// - PB0: ADC1_IN8 (A3) - Note: Also used for LED1
+// - PC1: ADC1_IN11 (A4)
+// - PC0: ADC1_IN10 (A5)
+//
 // Note: This board has 3 user LEDs, we'll use LD1 (Green) as the primary LED
 
 use super::{BoardConfiguration, InterruptHandlers};
@@ -78,6 +86,11 @@ impl BoardConfig {
   pub const BUTTON_PIN_NAME: &'static str = "PC13"; // B1 - Blue tactile button
   pub const BUTTON_DESCRIPTION: &'static str = "Built-in button B1 (Blue)";
 
+  // ADC pin constant - PA0 is available on both boards (Arduino A0)
+  pub const ADC_PIN_NAME: &'static str = "PA0";
+  pub const ADC_VREF_MV: u16 = 3300; // Reference voltage in millivolts (3.3V)
+  // pub const ADC_VREF_MV: u16 = 5000; // Alternative: 5V reference
+
   /// Initialize USART3 serial for this board (PD8=TX, PD9=RX) - ST-LINK VCP, spawn RX/HDLC tasks, and return TX half
   pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
     // On STM32F413ZH Nucleo-144, using USART3 (PD9=RX, PD8=TX) for ST-LINK VCP
@@ -103,7 +116,13 @@ impl BoardConfig {
     IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
     Rtc,
     UartTx<'static, Async>,
+    crate::hardware::adc::AdcReader<'static>,
+    embassy_stm32::Peri<'static, embassy_stm32::peripherals::PA0>,
   ) {
+    // ADC setup on PA0 (ADC_PIN_NAME)
+    let adc_pin = p.PA0;
+    let adc = crate::hardware::adc::AdcReader::new(p.ADC1, crate::hardware::adc::AdcResolution::Bits12, Self::ADC_VREF_MV);
+
     // GPIO
     let led = Output::new(p.PB0, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
     let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
@@ -124,7 +143,7 @@ impl BoardConfig {
       p.DMA1_CH1, // RX DMA for USART3
     );
 
-    (led, button, wdt, rtc, comm)
+    (led, button, wdt, rtc, comm, adc, adc_pin)
   }
 }
 

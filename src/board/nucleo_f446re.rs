@@ -13,6 +13,15 @@
 // - User Button (B1): PC13 (Blue tactile button)
 // - USART2 TX: PA2
 // - USART2 RX: PA3
+//
+// ADC pins (Arduino connector):
+// - PA0: ADC1_IN0 (A0)
+// - PA1: ADC1_IN1 (A1)
+// - PA4: ADC1_IN4 (A2)
+// - PB0: ADC1_IN8 (A3)
+// - PC1: ADC1_IN11 (A4)
+// - PC0: ADC1_IN10 (A5)
+// Note: PA2, PA3, PA5 also have ADC capability but are used for USART/LED
 
 use embassy_stm32::gpio::{Input, Output};
 // use embassy_stm32::peripherals;
@@ -61,6 +70,11 @@ impl BoardConfig {
   pub const BUTTON_PIN_NAME: &'static str = "PC13";
   pub const BUTTON_DESCRIPTION: &'static str = "Blue User Button (B1)";
 
+  // ADC pin constant - PA0 is available on both boards (Arduino A0)
+  pub const ADC_PIN_NAME: &'static str = "PA0";
+  pub const ADC_VREF_MV: u16 = 3300; // Reference voltage in millivolts (3.3V)
+  // pub const ADC_VREF_MV: u16 = 5000; // Alternative: 5V reference
+
   /// Initialize LED, button, watchdog, RTC, and serial for this board.
   pub fn init_all_hardware(
     spawner: Spawner,
@@ -71,7 +85,13 @@ impl BoardConfig {
     IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>,
     Rtc,
     UartTx<'static, Async>,
+    crate::hardware::adc::AdcReader<'static>,
+    embassy_stm32::Peri<'static, embassy_stm32::peripherals::PA0>,
   ) {
+    // ADC setup on PA0 (ADC_PIN_NAME)
+    let adc_pin = p.PA0;
+    let adc = crate::hardware::adc::AdcReader::new(p.ADC1, crate::hardware::adc::AdcResolution::Bits12, Self::ADC_VREF_MV);
+
     // GPIO
     let led = Output::new(p.PA5, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
     let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
@@ -92,7 +112,7 @@ impl BoardConfig {
       p.DMA1_CH5,          // RX DMA
     );
 
-    (led, button, wdt, rtc, comm)
+    (led, button, wdt, rtc, comm, adc, adc_pin)
   }
 
   /// Initialize USART2 serial for this board (PA2=TX, PA3=RX), spawn RX/HDLC tasks, and return TX half
