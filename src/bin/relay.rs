@@ -57,6 +57,9 @@ async fn operation_task(
         if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
           let mut tx_ref = &mut tx;
           embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
+        } else if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Version) {
+          let mut tx_ref = &mut tx;
+          embassy_stm32_starter::service::comm::write(&mut tx_ref, &embassy_stm32_starter::service::comm::version_reply(&msg));
         } else if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Raw) {
           if msg.payload.len() >= 2 && msg.payload[0] == 0xD8 {
             match msg.payload[1] {

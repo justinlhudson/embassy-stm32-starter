@@ -1,6 +1,6 @@
 use embassy_executor::Spawner;
 use embassy_stm32::{
-  Peri, bind_interrupts,
+  Peri,
   mode::Async,
   usart::{self, Config as UartConfig, Instance, RxDma, RxPin, TxDma, TxPin, Uart, UartRx, UartTx},
 };
@@ -14,21 +14,6 @@ use heapless::Vec;
 const SERIAL_BUFFER_SIZE: usize = 256;
 const SERIAL_QUEUE_DEPTH: usize = 4;
 const SERIAL_BAUDRATE: u32 = 115_200;
-
-// Bind USART2 interrupt handler for async operation
-bind_interrupts!(pub struct Irqs {
-    USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
-});
-
-// Also expose a binding for USART3 for boards that use it (e.g., Nucleo-144 F413ZH)
-bind_interrupts!(pub struct IrqsUsart3 {
-    USART3 => usart::InterruptHandler<embassy_stm32::peripherals::USART3>;
-});
-
-// Also expose a binding for USART6 for boards that use it (e.g., Nucleo-144 F413ZH VCP)
-bind_interrupts!(pub struct IrqsUsart6 {
-    USART6 => usart::InterruptHandler<embassy_stm32::peripherals::USART6>;
-});
 
 // DMA-based serial receiver with idle interrupt detection
 pub struct SerialReceiver<'a> {
@@ -126,20 +111,22 @@ pub async fn recv_raw() -> Vec<u8, SERIAL_BUFFER_SIZE> {
   SERIAL_RX_QUEUE.receive().await
 }
 
-/// Get the interrupt handler type aliases for export to board configs
-pub use Irqs as Serial2Irqs;
-pub use IrqsUsart3 as Serial3Irqs;
-pub use IrqsUsart6 as Serial6Irqs;
-
-/// Generic serial initializer: takes USART peri, RX/TX pins, Irqs binding, TX/RX DMA, sets 115200 and spawns tasks.
+/// Generic serial initializer: takes USART peri, RX/TX pins, TX/RX DMA, Irqs binding, sets 115200 and spawns tasks.
 pub fn init_serial<T, RX, TX, TXDMA, RXDMA>(
   spawner: Spawner,
   usart: Peri<'static, T>,
   rx: Peri<'static, RX>,
   tx: Peri<'static, TX>,
-  irqs: impl embassy_stm32::interrupt::typelevel::Binding<<T as Instance>::Interrupt, usart::InterruptHandler<T>> + 'static,
   tx_dma: Peri<'static, TXDMA>,
   rx_dma: Peri<'static, RXDMA>,
+  irqs: impl embassy_stm32::interrupt::typelevel::Binding<<T as Instance>::Interrupt, usart::InterruptHandler<T>>
+    + embassy_stm32::interrupt::typelevel::Binding<
+      <TXDMA as embassy_stm32::dma::ChannelInstance>::Interrupt,
+      embassy_stm32::dma::InterruptHandler<TXDMA>,
+    > + embassy_stm32::interrupt::typelevel::Binding<
+      <RXDMA as embassy_stm32::dma::ChannelInstance>::Interrupt,
+      embassy_stm32::dma::InterruptHandler<RXDMA>,
+    > + 'static,
 ) -> UartTx<'static, Async>
 where
   T: Instance + 'static,
@@ -151,7 +138,7 @@ where
   let mut cfg = UartConfig::default();
   cfg.baudrate = SERIAL_BAUDRATE;
 
-  let uart = Uart::new(usart, rx, tx, irqs, tx_dma, rx_dma, cfg).unwrap();
+  let uart = Uart::new(usart, rx, tx, tx_dma, rx_dma, irqs, cfg).unwrap();
   let (tx, rx) = uart.split();
   let receiver = create_serial_receiver(rx);
   let _ = spawner.spawn(serial_rx_task_dma(receiver));

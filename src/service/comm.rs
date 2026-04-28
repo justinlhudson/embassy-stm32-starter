@@ -34,6 +34,7 @@ pub enum Command {
   Nak = 0x02,
   Ping = 0x03,
   Raw = 0x04,
+  Version = 0x05,
 }
 
 impl From<Command> for u16 {
@@ -50,6 +51,7 @@ impl core::convert::TryFrom<u16> for Command {
       0x02 => Ok(Command::Nak),
       0x03 => Ok(Command::Ping),
       0x04 => Ok(Command::Raw),
+      0x05 => Ok(Command::Version),
       _ => Err(()),
     }
   }
@@ -107,6 +109,14 @@ impl Message {
 
 // Queue of parsed Comms messages
 static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, COMMS_QUEUE_DEPTH> = Channel::new();
+
+/// Build a Version reply echoing the request's id.
+/// Payload is the firmware version string from Cargo.toml at compile time.
+pub fn version_reply(req: &Message) -> Message {
+  let mut msg = Message::new(Command::Version, env!("CARGO_PKG_VERSION").as_bytes());
+  msg.id = req.id;
+  msg
+}
 
 /// Encode a Message and send over HDLC
 pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {

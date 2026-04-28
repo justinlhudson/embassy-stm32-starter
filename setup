@@ -10,6 +10,54 @@ set -e
 
 BOARD="${1:-nucleo}"
 
+# ── Pre-flight: verify / install required tools ───────────────────────────────
+
+RUST_TARGET="thumbv7em-none-eabihf"
+
+check_and_install() {
+    local tool="$1"
+    local install_cmd="$2"
+    if ! command -v "$tool" &>/dev/null; then
+        echo "📦 '$tool' not found – installing..."
+        eval "$install_cmd"
+        if ! command -v "$tool" &>/dev/null; then
+            echo "❌ Failed to install '$tool'. Please install it manually and re-run."
+            exit 1
+        fi
+        echo "✅ '$tool' installed."
+    fi
+}
+
+# arm-none-eabi-ld  (system package — binutils only, no GCC/newlib needed)
+if ! command -v arm-none-eabi-ld &>/dev/null; then
+    echo "📦 'arm-none-eabi-ld' not found – installing via apt..."
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y --no-install-recommends binutils-arm-none-eabi
+    elif command -v brew &>/dev/null; then
+        brew install arm-none-eabi-binutils
+    else
+        echo "❌ Cannot install 'arm-none-eabi-ld': no supported package manager found."
+        echo "   Install it manually (apt: binutils-arm-none-eabi)."
+        exit 1
+    fi
+fi
+
+# flip-link  (cargo install)
+check_and_install flip-link "cargo install flip-link"
+
+# probe-rs  (cargo install)
+check_and_install probe-rs "cargo install probe-rs-tools --locked"
+
+# Rust cross-compilation target
+if ! rustup target list --installed 2>/dev/null | grep -q "$RUST_TARGET"; then
+    echo "📦 Rust target '$RUST_TARGET' not installed – adding..."
+    rustup target add "$RUST_TARGET"
+fi
+
+echo "✅ All dependencies satisfied."
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Function to get current memory configuration
 get_current_memory_target() {
     if [[ -f "memory.x" ]]; then
@@ -141,7 +189,7 @@ LAUNCH_FILE=".vscode/launch.json"
 if [[ -f "$LAUNCH_TEMPLATE" ]]; then
     cp "$LAUNCH_TEMPLATE" "$LAUNCH_FILE"
     # Simple, portable sed replacement for chip field
-    sed -i '' "s/\"chip\": \"{{CHIP_NAME}}\".*/\"chip\": \"$CHIP_NAME\",/" "$LAUNCH_FILE"
+    sed -i "s/\"chip\": \"{{CHIP_NAME}}\".*/\"chip\": \"$CHIP_NAME\",/" "$LAUNCH_FILE"
     echo "✅ Updated $LAUNCH_FILE chip field to $CHIP_NAME"
 else
     echo "⚠️  $LAUNCH_TEMPLATE not found; skipping chip update."

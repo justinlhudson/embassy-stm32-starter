@@ -18,17 +18,25 @@
 // Note: This board has 3 user LEDs, we'll use LD1 (Green) as the primary LED
 
 use super::{BoardConfiguration, InterruptHandlers};
-use crate::hardware::GpioDefaults;
 use crate::hardware::serial;
+use crate::hardware::GpioDefaults;
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::mode::Async;
 use embassy_stm32::rtc::{Rtc, RtcConfig};
 use embassy_stm32::usart::UartTx;
 use embassy_stm32::wdg::IndependentWatchdog;
+use embassy_stm32::{bind_interrupts, dma, usart};
 
 use embassy_stm32::Config as EmbassyConfig;
 // Advanced RCC configuration disabled for compatibility
+
+// Combined binding: USART3 interrupt + DMA1_STREAM3 (TX) + DMA1_STREAM1 (RX)
+bind_interrupts!(struct Usart3Irqs {
+    USART3       => usart::InterruptHandler<embassy_stm32::peripherals::USART3>;
+    DMA1_STREAM3 => dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH3>;
+    DMA1_STREAM1 => dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH1>;
+});
 
 pub struct BoardConfig;
 
@@ -68,7 +76,7 @@ impl BoardConfig {
   pub const FLASH_STORAGE_START: u32 = 0x08160000; // Start of last 128KB (1408KB from base)
   pub const FLASH_STORAGE_END: u32 = 0x08180000; // End of flash (1536KB from base)
   pub const FLASH_STORAGE_SIZE: usize = 128 * 1024; // 128KB storage region
-  // Board constants (mirroring F446RE style)
+                                                    // Board constants (mirroring F446RE style)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-144 F413ZH";
   pub const MCU_NAME: &'static str = "STM32F413ZH";
   pub const FLASH_SIZE_KB: u32 = 1536; // 1.5 MB Flash
@@ -83,13 +91,11 @@ impl BoardConfig {
     // On STM32F413ZH Nucleo-144, using USART3 (PD9=RX, PD8=TX) for ST-LINK VCP
     // DMA mapping for USART3: TX = DMA1_CH3, RX = DMA1_CH1
     serial::init_serial(
-      spawner,
-      p.USART3,
-      p.PD9, // RX
-      p.PD8, // TX
-      serial::Serial3Irqs,
-      p.DMA1_CH3, // TX DMA for USART3
-      p.DMA1_CH1, // RX DMA for USART3
+      spawner, p.USART3, p.PD9,      // RX
+      p.PD8,      // TX
+      p.DMA1_CH3, // TX DMA
+      p.DMA1_CH1, // RX DMA
+      Usart3Irqs, // combined USART3 + DMA irqs
     )
   }
 
@@ -110,18 +116,16 @@ impl BoardConfig {
 
     // Watchdog and RTC
     let mut wdt = IndependentWatchdog::new(p.IWDG, Self::WATCHDOG_TIMEOUT_US);
-    let rtc = Rtc::new(p.RTC, RtcConfig::default());
+    let (rtc, _) = Rtc::new(p.RTC, RtcConfig::default());
     wdt.unleash();
 
     // Serial (USART3 on PD8/PD9 - ST-LINK VCP)
     let comm = serial::init_serial(
-      spawner,
-      p.USART3,
-      p.PD9, // RX
-      p.PD8, // TX
-      serial::Serial3Irqs,
-      p.DMA1_CH3, // TX DMA for USART3
-      p.DMA1_CH1, // RX DMA for USART3
+      spawner, p.USART3, p.PD9,      // RX
+      p.PD8,      // TX
+      p.DMA1_CH3, // TX DMA
+      p.DMA1_CH1, // RX DMA
+      Usart3Irqs, // combined USART3 + DMA irqs
     );
 
     (led, button, wdt, rtc, comm)

@@ -17,15 +17,23 @@
 use embassy_stm32::gpio::{Input, Output};
 // use embassy_stm32::peripherals;
 use super::{BoardConfiguration, InterruptHandlers};
-use crate::hardware::GpioDefaults;
 use crate::hardware::serial;
+use crate::hardware::GpioDefaults;
 use embassy_executor::Spawner;
 use embassy_stm32::mode::Async;
 use embassy_stm32::rtc::{Rtc, RtcConfig};
 use embassy_stm32::usart::UartTx;
 use embassy_stm32::wdg::IndependentWatchdog;
+use embassy_stm32::{bind_interrupts, dma, usart};
 
 use embassy_stm32::Config as EmbassyConfig;
+
+// Combined binding: USART2 interrupt + DMA1_STREAM5 (RX) + DMA1_STREAM6 (TX)
+bind_interrupts!(struct Usart2Irqs {
+    USART2      => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+    DMA1_STREAM5 => dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH5>;
+    DMA1_STREAM6 => dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH6>;
+});
 
 pub struct BoardConfig;
 
@@ -49,9 +57,9 @@ impl BoardConfig {
   /// STM32F446RE flash layout: Sectors 0-3 (16KB each), Sector 4 (64KB), Sectors 5-7 (128KB each)
   /// Using sector 6: 256KB to 384KB from flash base
   pub const FLASH_STORAGE_START: u32 = 0x08040000; // Start of sector 6 (256KB from base)
-  pub const FLASH_STORAGE_END: u32 = 0x08060000; // End of sector 6 (384KB from base)  
+  pub const FLASH_STORAGE_END: u32 = 0x08060000; // End of sector 6 (384KB from base)
   pub const FLASH_STORAGE_SIZE: usize = 128 * 1024; // 128KB - size of sector 6
-  // Board constants (for compatibility with existing applications)
+                                                    // Board constants (for compatibility with existing applications)
   pub const BOARD_NAME: &'static str = "STM32 Nucleo-64 F446RE";
   pub const MCU_NAME: &'static str = "STM32F446RE";
   pub const FLASH_SIZE_KB: u32 = 512;
@@ -78,18 +86,16 @@ impl BoardConfig {
 
     // Watchdog and RTC
     let mut wdt = IndependentWatchdog::new(p.IWDG, Self::WATCHDOG_TIMEOUT_US);
-    let rtc = Rtc::new(p.RTC, RtcConfig::default());
+    let (rtc, _) = Rtc::new(p.RTC, RtcConfig::default());
     wdt.unleash();
 
     // Serial (USART2 on PA2/PA3)
     let comm = serial::init_serial(
-      spawner,
-      p.USART2,
-      p.PA3,               // RX
-      p.PA2,               // TX
-      serial::Serial2Irqs, // USART2 irqs
-      p.DMA1_CH6,          // TX DMA
-      p.DMA1_CH5,          // RX DMA
+      spawner, p.USART2, p.PA3,      // RX
+      p.PA2,      // TX
+      p.DMA1_CH6, // TX DMA
+      p.DMA1_CH5, // RX DMA
+      Usart2Irqs, // combined USART2 + DMA irqs
     );
 
     (led, button, wdt, rtc, comm)
@@ -98,13 +104,11 @@ impl BoardConfig {
   /// Initialize USART2 serial for this board (PA2=TX, PA3=RX), spawn RX/HDLC tasks, and return TX half
   pub fn init_serial(spawner: Spawner, p: embassy_stm32::Peripherals) -> UartTx<'static, Async> {
     serial::init_serial(
-      spawner,
-      p.USART2,
-      p.PA3,               // RX
-      p.PA2,               // TX
-      serial::Serial2Irqs, // USART2 irqs
-      p.DMA1_CH6,          // TX DMA
-      p.DMA1_CH5,          // RX DMA
+      spawner, p.USART2, p.PA3,      // RX
+      p.PA2,      // TX
+      p.DMA1_CH6, // TX DMA
+      p.DMA1_CH5, // RX DMA
+      Usart2Irqs, // combined USART2 + DMA irqs
     )
   }
 }

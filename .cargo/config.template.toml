@@ -2,7 +2,7 @@
 # Managed by setup script
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-linker = "arm-none-eabi-gcc"
+linker = "arm-none-eabi-ld"
 runner = [
   "probe-rs",
   "run",

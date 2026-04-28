@@ -69,6 +69,9 @@ async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::
         if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
           let mut tx_ref = &mut tx;
           embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
+        } else if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Version) {
+          let mut tx_ref = &mut tx;
+          embassy_stm32_starter::service::comm::write(&mut tx_ref, &embassy_stm32_starter::service::comm::version_reply(&msg));
         }
       }
       None => {
