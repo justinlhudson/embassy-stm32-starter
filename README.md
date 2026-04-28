@@ -33,7 +33,8 @@ This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynam
 
 ```
 embassy-stm32-starter/
-├── 🎯 setup                           # Board configuration management script
+├── 🎯 setup                           # Board configuration & dependency install script
+├── ⚡ flash                           # Build, flash, and stream RTT logs
 ├── 📄 Cargo.toml                     # 🔄 Active project config (managed by setup)
 ├── 📄 memory.x                       # 🔄 Active memory layout (managed by setup)
 ├── 📄 board.rs                       # 🔄 Active board config (managed by setup)
@@ -113,18 +114,34 @@ Use `cargo run --bin relay` to flash and run the relay application.
 
 ### Commands
 
+### `setup` — one-time board configuration
+
+Configures the project for a target board, installs all required dependencies
+(`arm-none-eabi-ld`, `flip-link`, `probe-rs`, Rust cross target), and regenerates
+derived config files (`Cargo.toml`, `memory.x`, `.cargo/config.toml`, `.vscode/launch.json`).
+
 ```bash
-# Configure for your board (defaults to STM32F446RE Nucleo)
-./setup nucleo                    # STM32F446RE Nucleo-64
-# OR
+./setup nucleo                    # STM32F446RE Nucleo-64  (default)
 ./setup nucleo144                 # STM32F413ZH Nucleo-144
 ```
 
+Re-run whenever you switch boards or on a fresh clone.
+
+### `flash` — build, flash, and stream logs
+
+Detects the connected board, calls `setup` if needed, builds the selected binary,
+flashes it via `probe-rs`, and streams RTT logs until Ctrl+C.
+
 ```bash
-# Run commands
-cargo run --bin example          # Flash and run with RTT logs
-# Test commands
-cargo test --test <file>         # Run test
+./flash                           # flash default binary (example)
+./flash relay                     # flash a specific binary
+```
+
+### Other commands
+
+```bash
+cargo run --bin example          # alternative: flash and run via cargo
+cargo test --test <file>         # run integration tests
 ```
 
 ## 📡 Communication Protocol
@@ -147,10 +164,11 @@ Message Payload (9-byte header + data):
 
 | Command | Value | Description             |
 | ------- | ----- | ----------------------- |
-| `Ack`   | 0x01  | Acknowledgment          |
-| `Nak`   | 0x02  | Negative acknowledgment |
-| `Ping`  | 0x03  | Ping request/response   |
-| `Raw`   | 0x04  | Raw data transfer       |
+| `Ack`     | 0x01  | Acknowledgment                    |
+| `Nak`     | 0x02  | Negative acknowledgment           |
+| `Ping`    | 0x03  | Ping request/response             |
+| `Raw`     | 0x04  | Raw data transfer                 |
+| `Version` | 0x05  | Query firmware version (semver)   |
 
 ## 💾 Flash Storage
 
