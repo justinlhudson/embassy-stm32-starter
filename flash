@@ -7,33 +7,47 @@ set -e
 
 BINARY="${1:-example}"
 
-# ── 1. Detect board via ST-Link USB VID 0483 ─────────────────────────────────
+# ── 1. Detect board by reading DBGMCU_IDCODE via probe-rs ────────────────────
+#
+# USB VID/PID alone is not reliable: both Nucleo-64 (F446RE) and Nucleo-144
+# (F413ZH) ship with ST-Link/V2.1 (0483:374b). Read the chip's DBGMCU_IDCODE
+# register at 0xE0042000 instead — the lower 12 bits are the device ID:
+#   0x421 → STM32F446
+#   0x463 → STM32F413/F423
 
 detect_board() {
+    # First confirm an ST-Link is present at all
     local lsusb_out
     lsusb_out=$(lsusb 2>/dev/null)
-
-    # ST-Link v2.1 (Nucleo-64 / F446RE)
-    if echo "$lsusb_out" | grep -q "0483:374b"; then
-        echo "nucleo"
+    if ! echo "$lsusb_out" | grep -qE "0483:(374b|374e)"; then
+        echo ""
         return
     fi
 
-    # ST-Link v3 (Nucleo-144 / F413ZH)
-    if echo "$lsusb_out" | grep -q "0483:374e"; then
-        echo "nucleo144"
+    # --chip just needs to be any ARM Cortex-M STM32 to attach SWD; the
+    # IDCODE read works regardless of whether it matches the real silicon.
+    local idcode
+    idcode=$(probe-rs read --chip STM32F446RE b32 0xE0042000 1 2>/dev/null | tr -d '[:space:]')
+    if [[ -z "$idcode" ]]; then
+        echo ""
         return
     fi
 
-    echo ""
+    # Mask to lower 12 bits (device ID)
+    local devid=$(( 0x$idcode & 0xFFF ))
+    case "$devid" in
+        $((0x421))) echo "nucleo" ;;     # STM32F446
+        $((0x463))) echo "nucleo144" ;;  # STM32F413/F423
+        *)          echo "" ;;
+    esac
 }
 
 BOARD=$(detect_board)
 
 if [[ -z "$BOARD" ]]; then
-    echo "❌ No STM32 Nucleo board detected on USB."
+    echo "❌ No supported STM32 Nucleo board detected on USB."
     echo "   Make sure the board is plugged in with a data-capable cable."
-    echo "   Expected USB VIDs: 0483:374b (ST-Link v2.1) or 0483:374e (ST-Link v3)"
+    echo "   Supported: Nucleo-64 F446RE (devid 0x421), Nucleo-144 F413ZH (devid 0x463)"
     exit 1
 fi
 
