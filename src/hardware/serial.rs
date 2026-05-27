@@ -141,8 +141,9 @@ where
   let uart = Uart::new(usart, rx, tx, tx_dma, rx_dma, irqs, cfg).unwrap();
   let (tx, rx) = uart.split();
   let receiver = create_serial_receiver(rx);
+  // Spawn the DMA-driven raw RX task. Applications that want parsed
+  // messages should additionally call `service::comm::start(spawner)`.
   spawner.spawn(serial_rx_task_dma(receiver).unwrap());
-  spawner.spawn(crate::service::comm::serial_hdlc_consumer_task().unwrap());
   tx
 }
 

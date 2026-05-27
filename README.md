@@ -1,190 +1,131 @@
-# 🚀 Embassy STM32 Starter
+# Embassy STM32 Starter
 
-> **✨ Magic Setup:** Instantly switch between supported STM32 boards and auto-configure your project with a single command: `./setup <board>`. The setup script updates all configs, linker scripts, and VS Code debug settings for you!
+Async embedded Rust template for STM32 Nucleo boards built on the
+[Embassy](https://embassy.dev) framework. Multi-board support is driven by
+Cargo features and a `build.rs` — no setup script required.
 
-A modern async embedded Rust project template using the **Embassy framework** for STM32 microcontrollers. Features **automatic multi-board configuration**, HDLC communication, comprehensive hardware abstraction, and **automatic crash recovery**.
+## Features
 
-## ✨ Features
+- Multi-board: STM32F413ZH (Nucleo-144) and STM32F446RE (Nucleo-64)
+- Compile-time board selection via Cargo features
+- HDLC framing with optional CRC-16 FCS (see
+  [embedded-serial-bridge](https://github.com/justinlhudson/embedded-serial-bridge))
+- Flash storage via the official `embassy-stm32` driver
+- Hard-fault auto-reset
+- Async tasks for LED, button (edge-debounced), RTC, and comms
+- Two example binaries: `example` (full feature tour) and `relay` (HDLC-controlled GPIO)
+- HIL tests, including an opt-in destructive flash round-trip
 
-- 🎯 **Multi-Board Support**: STM32F446RE (Nucleo-64) and STM32F413ZH (Nucleo-144)
-- 🔄 **One-Command Setup**: Automatic board configuration with `./setup nucleo`
-- 📡 **HDLC Communication**: Reliable serial protocol with optional CRC-16 (see [embedded-serial-bridge](https://github.com/justinlhudson/embedded-serial-bridge))
-- 💾 **Flash Storage**: Direct register access
-- 🛡️ **Auto-Recovery**: Hard fault auto-reset for crash protection
-- ⚡ **Async Tasks**: LED, button, RTC, and communication handling
-- 🏗️ **Conditional Compilation**: MCU-specific features via cargo flags
-- 🔧 **VS Code Ready**: Pre-configured debugging and IntelliSense
-- ✅ **Hardware Testing**: Integration tests on real hardware
+## Supported Boards
 
-## 🏗️ Architecture & Configuration
+| Board      | MCU         | Flash  | RAM   | Serial | LED | Button | Storage sector |
+| ---------- | ----------- | ------ | ----- | ------ | --- | ------ | -------------- |
+| Nucleo-144 | STM32F413ZH | 1536KB | 320KB | USART3 | PB0 | PC13   | 128KB (S15)    |
+| Nucleo-64  | STM32F446RE |  512KB | 128KB | USART2 | PA5 | PC13   | 128KB (S6)     |
 
-### 🧩 Heapless Design
-
-This project uses the [`heapless`](https://docs.rs/heapless) crate for all dynamic data structures, such as `heapless::Vec`.
-
-### Supported Boards
-
-| Board          | MCU         | Flash  | RAM   | Serial | LED | Button | Flash Storage  |
-| -------------- | ----------- | ------ | ----- | ------ | --- | ------ | -------------- |
-| **Nucleo-64**  | STM32F446RE | 512KB  | 128KB | USART2 | PA5 | PC13   | Sector (128KB) |
-| **Nucleo-144** | STM32F413ZH | 1536KB | 320KB | USART3 | PB0 | PC13   | Sector (128KB) |
-
-## 📁 Project Structure
+## Project Layout
 
 ```
 embassy-stm32-starter/
-├── 🎯 setup                           # Board configuration & dependency install script
-├── ⚡ flash                           # Build, flash, and stream RTT logs
-├── 📄 Cargo.toml                     # 🔄 Active project config (managed by setup)
-├── 📄 memory.x                       # 🔄 Active memory layout (managed by setup)
-├── 📄 board.rs                       # 🔄 Active board config (managed by setup)
-├── 📄 rustfmt.toml                   # Code formatting configuration
-│
-├── 🔧 .cargo/
-│   └── config.toml                   # 🔄 Build settings (managed by setup)
-│
-├── 🖥️ .vscode/                       # VS Code integration
-│   ├── launch.json                   # 🔄 Debug config (managed by setup)
-│   ├── settings.json                 # Editor settings, rust-analyzer config
-│   └── tasks.json                    # Build tasks (cargo check)
-│
-├── � src/
-│   ├── 📄 lib.rs                     # Library root & module exports
-│   │
-│   ├── 📂 bin/                       # 🎯 Application binaries
-│   │   └── example.rs                # Demo app: tasks + communication
-│   │
-│   ├── 📂 board/                     # Board-specific configurations
-│   │   ├── base.rs                   # Common board traits
-│   │   ├── nucleo_f446re.rs          # STM32F446RE Nucleo-64 config
-│   │   └── nucleo144_f413zh.rs       # STM32F413ZH Nucleo-144 config
-│   │
-│   ├── 📂 hardware/                  # 🔧 Hardware Abstraction Layer
-│   │   ├── flash.rs                  # Flash storage with direct register access
-│   │   ├── gpio.rs                   # LED/button control utilities
-│   │   ├── hardfault.rs              # Exception handling & auto-reset functionality
-│   │   ├── serial.rs                 # UART with DMA + idle detection
-│   │   └── timers.rs                 # Timing constants & async delays
-│   │
-│   ├── 📂 service/                   # 🌐 High-level services
-│   │   └── comm.rs                   # HDLC message framing/parsing
-│   │
-│   ├── 📂 protocol/                  # � Communication protocols
-│   │   └── hdlc.rs                   # HDLC frame encode/decode + CRC
-│   │
-│   └── � common/                    # ♻️ Reusable components
-│       └── tasks.rs                  # Embassy async tasks (LED, button, RTC)
-│
-├── 🧪 tests/                         # Integration testing
-│   ├── integration.rs                # Hardware-in-the-loop tests
-│   └── flash.rs                      # Flash storage configuration tests
-│
-└── 📋 Templates/                     # Configuration templates
-    ├── Cargo.template.toml           # Cargo config template
-    ├── memory.template.x             # Memory layout template
-    ├── board.template.rs             # Board config template
-    ├── .cargo/config.template.toml   # Build config template
-    └── .vscode/launch.template.json  # Debug config template
+├── build.rs                  # picks the right memory.x from /memory/ based on MCU feature
+├── memory/                   # canonical linker scripts per MCU
+│   ├── stm32f413zh.x
+│   └── stm32f446re.x
+├── flash.sh                  # auto-detects board via DBGMCU IDCODE, builds + flashes
+├── Cargo.toml                # feature-driven; pick one of `stm32f413` / `stm32f446`
+├── src/
+│   ├── lib.rs                # crate root + module tree + `prelude`
+│   ├── bin/
+│   │   ├── example.rs        # full demo: tasks, flash, comms
+│   │   └── relay.rs          # HDLC-controlled GPIO (PA9 / Arduino D8)
+│   ├── board/
+│   │   ├── base.rs           # `Board` trait + `BoardHardware` struct
+│   │   ├── nucleo144_f413zh.rs
+│   │   └── nucleo_f446re.rs
+│   ├── hardware/
+│   │   ├── flash.rs          # `Flash::new_blocking()` wrapper + region helpers
+│   │   ├── gpio.rs           # `GpioDefaults` constants
+│   │   ├── hardfault.rs      # auto-reset on fault
+│   │   ├── serial.rs         # UART + DMA + idle-line RX task
+│   │   └── timers.rs         # `Timing` constants + helpers
+│   ├── protocol/
+│   │   └── hdlc.rs           # framer + deframer + CRC-16
+│   ├── service/
+│   │   └── comm.rs           # message struct, parser, `dispatch()` helper
+│   └── common/
+│       └── tasks.rs          # reusable tasks: `button_monitor`, `rtc_clock`, `led_blink`
+└── tests/
+    ├── integration.rs
+    └── flash.rs              # destructive ops behind `flash-destructive` feature
 ```
 
-## � Applications
+## Build & Flash
 
-This starter includes example applications demonstrating different use cases:
-
-### 🎯 `example` - Full Feature Demo
-
-Located in `src/bin/example.rs`, this comprehensive demo showcases all framework capabilities:
-
-- All async tasks (LED blinking, button handling, RTC)
-- Flash storage operations
-- HDLC communication protocol with message handling (Ping, Raw commands)
-- Integration with all hardware modules
-- Auto-recovery on HDLC FCS errors
-
-### 🔌 `relay` - GPIO Control & Communication
-
-Located in `src/bin/relay.rs`, a focused application derived from `example` for remote GPIO control:
-
-- **Button Control**: Toggle D8 output (PA9 on Nucleo-\*) using the onboard button
-- **Serial Control**: Control D8 via HDLC Raw commands (`0xD8 0x01` = HIGH, `0xD8 0x00` = LOW)
-
-Use `cargo run --bin relay` to flash and run the relay application.
-
-## �🚀 Usage
-
-### Commands
-
-### `setup` — one-time board configuration
-
-Configures the project for a target board, installs all required dependencies
-(`arm-none-eabi-ld`, `flip-link`, `probe-rs`, Rust cross target), and regenerates
-derived config files (`Cargo.toml`, `memory.x`, `.cargo/config.toml`, `.vscode/launch.json`).
+### Auto-detect board
 
 ```bash
-./setup nucleo                    # STM32F446RE Nucleo-64  (default)
-./setup nucleo144                 # STM32F413ZH Nucleo-144
+./flash.sh              # builds `example`, detects the connected MCU, flashes
+./flash.sh relay        # flashes the `relay` binary
 ```
 
-Re-run whenever you switch boards or on a fresh clone.
+`flash.sh` reads the DBGMCU IDCODE via `probe-rs` and passes the right
+`--features` set to `cargo`.
 
-### `flash` — build, flash, and stream logs
-
-Detects the connected board, calls `setup` if needed, builds the selected binary,
-flashes it via `probe-rs`, and streams RTT logs until Ctrl+C.
+### Manual
 
 ```bash
-./flash                           # flash default binary (example)
-./flash relay                     # flash a specific binary
+cargo build --release --no-default-features --features stm32f413,hdlc_fcs
+cargo build --release --no-default-features --features stm32f446,hdlc_fcs
 ```
 
-### Other commands
+## Features
 
-```bash
-cargo run --bin example          # alternative: flash and run via cargo
-cargo test --test <file>         # run integration tests
+| Feature             | Purpose                                                |
+| ------------------- | ------------------------------------------------------ |
+| `stm32f413`         | Target STM32F413ZH (Nucleo-144)                        |
+| `stm32f446`         | Target STM32F446RE (Nucleo-64)                         |
+| `hdlc_fcs`          | Append/verify CRC-16 FCS on every HDLC frame           |
+| `flash-destructive` | Allow the `flash` HIL test to erase + write the sector |
+
+Exactly one MCU feature must be enabled; the build will `compile_error!`
+otherwise.
+
+## Communication Protocol
+
 ```
+HDLC frame:  [0x7E] [escaped payload] [escaped CRC-16] [0x7E]
 
-## 📡 Communication Protocol
-
-### HDLC Message Format
-
-The project implements a custom message protocol over HDLC framing (see [embedded-serial-bridge](https://github.com/justinlhudson/embedded-serial-bridge) for PC client implementation):
-
-```
-HDLC Frame: [0x7E] [Escaped Payload] [Escaped CRC-16] [0x7E]
-
-Message Payload (9-byte header + data):
+Message payload (9-byte header + 0..=256 B body, little-endian):
 ┌─────────┬─────┬───────────┬──────────┬────────┬─────────────┐
 │ Command │ ID  │ Fragments │ Fragment │ Length │   Payload   │
-│ (u16)   │(u8) │   (u16)   │  (u16)   │ (u16)  │(0-256 bytes)│
+│  (u16)  │(u8) │   (u16)   │  (u16)   │ (u16)  │             │
 └─────────┴─────┴───────────┴──────────┴────────┴─────────────┘
 ```
 
-### Commands (initial)
+| Command   | Value | Description                                        |
+| --------- | ----- | -------------------------------------------------- |
+| `Ack`     | 0x01  | Acknowledgment                                     |
+| `Nak`     | 0x02  | Negative acknowledgment                            |
+| `Ping`    | 0x03  | Auto-replied by `comm::dispatch` (echoes the msg)  |
+| `Raw`     | 0x04  | Application-defined payload                        |
+| `Version` | 0x05  | Auto-replied by `comm::dispatch` (`CARGO_PKG_VERSION`) |
 
-| Command | Value | Description             |
-| ------- | ----- | ----------------------- |
-| `Ack`     | 0x01  | Acknowledgment                    |
-| `Nak`     | 0x02  | Negative acknowledgment           |
-| `Ping`    | 0x03  | Ping request/response             |
-| `Raw`     | 0x04  | Raw data transfer                 |
-| `Version` | 0x05  | Query firmware version (semver)   |
+The library never resets the MCU on FCS errors — that's an app-level
+policy. `relay.rs` shows one such policy; `example.rs` just logs.
 
-## 💾 Flash Storage
+## Flash Storage
 
-Each board uses a dedicated flash sector for persistent storage with **direct register access**.
+`hardware::flash` wraps `embassy_stm32::flash::Flash::new_blocking()` with
+a per-board storage region (see `Board::FLASH_STORAGE_{START,END}`).
 
-#### Key Features:
+> A 128 KB sector erase on STM32F4 can take ~4 seconds. Run any erase
+> **before** `wdt.unleash()` — the IWDG cannot be disarmed once started,
+> and a sector erase mid-window will trigger a reset.
 
-- **Conditional Compilation**: MCU-specific `FLASH_BASE` addresses via cargo features (`stm32f446`, `stm32f413`)
-- **Auto-erase Strategy**: Hardware erase when flash contains data (0xFF writes don't work due to flash physics)
-
-## 📄 License
+## License
 
 Dual licensed under MIT or Apache-2.0 at your option.
 
-## 👤 Author
+## Author
 
-**Justin L. Hudson** - justinlhudson@gmail.com
-
----
+Justin L. Hudson — justinlhudson@gmail.com

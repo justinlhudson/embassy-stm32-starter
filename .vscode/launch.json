@@ -7,7 +7,7 @@
             "name": "Debug Any Binary (probe-rs-debug)",
             "cwd": "${workspaceFolder}",
             "connectUnderReset": true,
-            "chip": "{{CHIP_NAME}}", // This value will be replaced by the setup script
+            "chip": "${input:chipName}",
             "flashingConfig": {
                 "flashingEnabled": true,
                 "haltAfterReset": true
@@ -24,7 +24,14 @@
         {
             "id": "binaryName",
             "type": "promptString",
-            "description": "debug binary"
+            "description": "Binary name (e.g. example, relay)"
+        },
+        {
+            "id": "chipName",
+            "type": "pickString",
+            "description": "Target chip",
+            "options": [ "STM32F413ZH", "STM32F446RE" ],
+            "default": "STM32F413ZH"
         }
     ]
 }

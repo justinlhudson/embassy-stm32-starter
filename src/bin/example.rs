@@ -1,21 +1,22 @@
 #![no_std]
 #![no_main]
 
+//! Example application: showcases the full stack — board init, flash demo,
+//! watchdog, RTC, button monitor, and HDLC comms (Ping / Version handled
+//! automatically by `comm::dispatch`).
+
 use embassy_executor::Spawner;
 use embassy_stm32::Config;
-use embassy_stm32_starter::board::BoardConfig;
-use embassy_stm32_starter::common::tasks::*;
-use embassy_stm32_starter::hardware::Timing;
+use embassy_stm32::gpio::Output;
+use embassy_stm32::mode::Async;
+use embassy_stm32::usart::UartTx;
+use embassy_stm32_starter::common::tasks::{button_monitor, rtc_clock};
 use embassy_stm32_starter::hardware::flash;
-#[allow(unused_imports)]
 use embassy_stm32_starter::prelude::*;
-use embassy_stm32_starter::*;
 
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
   info!("Example starting...");
-
-  // Log board configuration info
   info!("Running on {}", BoardConfig::BOARD_NAME);
   info!(
     "MCU: {} with {}KB flash, {}KB RAM",
@@ -26,93 +27,70 @@ async fn main(_spawner: Spawner) {
   info!("LED: {} ({})", BoardConfig::LED_PIN_NAME, BoardConfig::LED_DESCRIPTION);
   info!("Button: {} ({})", BoardConfig::BUTTON_PIN_NAME, BoardConfig::BUTTON_DESCRIPTION);
 
-  let config = Config::default();
-  let p = embassy_stm32::init(config);
-  let (led, button, mut wdt, rtc, comm) = BoardConfig::init_all_hardware(_spawner, p);
+  let p = embassy_stm32::init(Config::default());
+  let BoardHardware { led, button, mut wdt, rtc, tx } = BoardConfig::init(spawner, p);
 
-  // Demonstrate flash storage functionality.
-  // IMPORTANT: flash erase (128KB sector) can take up to 4s on STM32F4.
-  // Run flash ops BEFORE unleashing the IWDG; the IWDG cannot be stopped
-  // once started, so starting it first would cause a watchdog reset mid-erase.
-  flash_demo().await;
-
-  // Now that flash operations are done, start the watchdog.
+  // Flash erase can take ~4s on STM32F4 — do it before unleashing the IWDG.
+  flash_demo();
   wdt.unleash();
 
-  _spawner.spawn(button_monitor(button).unwrap());
-  _spawner.spawn(rtc_clock(rtc).unwrap());
-  _spawner.spawn(comm_task(comm, led).unwrap());
+  // Spawn the HDLC consumer (parses incoming serial bytes into Messages).
+  comm::start(spawner);
+
+  spawner.spawn(button_monitor(button).unwrap());
+  spawner.spawn(rtc_clock(rtc).unwrap());
+  spawner.spawn(comm_task(tx, led).unwrap());
 
   info!("U ready? U ain't ready!");
   let mut last_sp: u32 = 0;
   loop {
-    // Print stack usage in KB only if changed
     let sp: u32;
     unsafe { core::arch::asm!("mov {}, sp", out(reg) sp) }
     if sp > last_sp {
-      let stack_used = sp.saturating_sub(BoardConfig::RAM_START);
-      let stack_used_kb = (stack_used as u32) / 1024; // Explicitly cast stack_used to u32 before division to ensure no implicit type promotion
-      let stack_left = BoardConfig::RAM_END.saturating_sub(sp);
-      let stack_left_kb = stack_left / 1024;
-      info!("Stack used: {}/{} KB (SP: {=u32:x})", stack_used_kb, stack_used_kb + stack_left_kb, sp);
+      let used_kb = sp.saturating_sub(BoardConfig::RAM_START) / 1024;
+      let left_kb = BoardConfig::RAM_END.saturating_sub(sp) / 1024;
+      info!("Stack: {}/{} KB (SP: {=u32:x})", used_kb, used_kb + left_kb, sp);
       last_sp = sp;
     }
-
     wdt.pet();
     Timing::delay_ms(Timing::WATCHDOG_PET_MS).await;
   }
 }
 
 #[embassy_executor::task]
-async fn comm_task(mut tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>, mut led: embassy_stm32::gpio::Output<'static>) {
-  let mut last_fcs_error_count = 0u8;
+async fn comm_task(mut tx: UartTx<'static, Async>, mut led: Output<'static>) {
+  let mut last_fcs = 0u8;
   loop {
-    // Try to read a message; if FCS error occurred, log it
-    match embassy_stm32_starter::service::comm::read() {
-      Some(msg) => {
-        led.set_high(); // Turn on the LED when a message is received
-        // *** Handle command(s) here *** //
-        if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Ping) {
-          let mut tx_ref = &mut tx;
-          embassy_stm32_starter::service::comm::write(&mut tx_ref, &msg);
-        } else if core::convert::TryFrom::try_from(msg.command) == Ok(embassy_stm32_starter::service::comm::Command::Version) {
-          let mut tx_ref = &mut tx;
-          embassy_stm32_starter::service::comm::write(&mut tx_ref, &embassy_stm32_starter::service::comm::version_reply(&msg));
-        }
-      }
-      None => {
-        // Could be no message, or FCS error (already logged in comm.rs)
-        led.set_low(); // Turn off the LED when no message is received
-        let fcs_errors = embassy_stm32_starter::service::comm::fcs_error_count();
-        if fcs_errors != last_fcs_error_count {
-          debug!("HDLC FCS error count: {}", fcs_errors);
-          last_fcs_error_count = fcs_errors;
-        }
-        Timer::after_millis(1).await; // backoff when no message is ready
-      }
+    let msg = comm::recv().await;
+    led.set_high();
+    // Built-in Ping echo + Version reply; everything else falls through to
+    // the closure (no app-specific commands in this example).
+    comm::dispatch(&mut tx, &msg, |_msg, _tx| {});
+    led.set_low();
+
+    let fcs = comm::fcs_error_count();
+    if fcs != last_fcs {
+      debug!("HDLC FCS error count: {}", fcs);
+      last_fcs = fcs;
     }
   }
 }
 
-/// Demonstrate flash storage by reading previous random number and writing a new one
-async fn flash_demo() {
-  info!("🔥 Flash Storage Demo - Auto-erase on dirty flash");
+/// Demonstrate flash storage: read first 16 bytes, then either write a test
+/// pattern (if clean) or erase (if dirty) so the next boot can write again.
+fn flash_demo() {
+  info!("Flash storage demo");
+  let mut buf = [0u8; 16];
+  flash::read_block(0, &mut buf).unwrap();
+  info!("Current flash[0..16]: {:?}", buf);
 
-  // Read current flash contents
-  let mut buffer = [0u8; 16];
-  flash::read_block(0, &mut buffer).unwrap();
-  info!("📖 Current flash contents: {:?}", buffer);
-
-  // Check if flash is erased (all 0xFF)
-  if buffer[0..4].iter().all(|&b| b == 0xFF) {
-    // Flash is clean - write test data
+  if buf[0..4].iter().all(|&b| b == 0xFF) {
     let data = [0x12, 0x34, 0x56, 0x78];
     flash::write_block(flash::start(), &data).unwrap();
-    info!("✅ Successfully wrote {:?} to clean flash", data);
+    info!("Wrote {:?} to clean flash", data);
   } else {
-    // Flash has data - erase it for next boot
-    info!("⚠️  Flash contains data - erasing for next boot");
-    flash::erase().await.unwrap();
-    info!("🔄 Flash erased! On next boot, demo will write to clean flash");
+    info!("Flash dirty — erasing (~4s)...");
+    flash::erase().unwrap();
+    info!("Erased. Next boot will write test pattern.");
   }
 }

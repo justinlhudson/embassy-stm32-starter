@@ -1,251 +1,197 @@
-use cortex_m::peripheral::SCB;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use heapless::Vec;
+//! Application-level message protocol layered on top of HDLC framing.
+//!
+//! Wire format (little-endian, header = 9 bytes):
+//! ```text
+//! ┌─────────┬─────┬───────────┬──────────┬────────┬─────────────┐
+//! │ Command │ Id  │ Fragments │ Fragment │ Length │   Payload   │
+//! │  (u16)  │(u8) │   (u16)   │  (u16)   │ (u16)  │ (0..=256 B) │
+//! └─────────┴─────┴───────────┴──────────┴────────┴─────────────┘
+//! ```
+//!
+//! Note: `Length` in the wire frame is the on-the-wire payload length and
+//! must equal `payload.len()` in the [`Message`] struct.
 
 use crate::hardware::serial;
 use crate::protocol::hdlc;
 use core::sync::atomic::{AtomicU8, Ordering};
-// FCS error counter
-static FCS_ERROR_COUNT: AtomicU8 = AtomicU8::new(0);
+use embassy_stm32::mode::Async;
+use embassy_stm32::usart::UartTx;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
+use heapless::Vec;
+use num_enum::TryFromPrimitive;
 
-/// Get the current FCS error count
-pub fn fcs_error_count() -> u8 {
-  FCS_ERROR_COUNT.load(Ordering::Relaxed)
-}
-
-// Define constants for queue depth and byte vector sizes
-const COMMS_BYTE_VEC_SIZE: usize = 512;
+// ---- sizing --------------------------------------------------------------
+pub const COMMS_HEADER_LEN: usize = 9;
+pub const COMMS_MAX_PAYLOAD: usize = 256;
 const COMMS_QUEUE_DEPTH: usize = 3;
-pub const COMMS_MAX_PAYLOAD: usize = 256; // half to account for escaping
+const RX_BUF_SIZE: usize = 512;
 
-// Byte vector aliases used throughout this module
-// Allow room for larger inbound/outbound frames (escaping can ~double size)
-pub type ByteVec = Vec<u8, COMMS_BYTE_VEC_SIZE>;
-pub type FramedBuf = Vec<u8, COMMS_BYTE_VEC_SIZE>;
 pub type CommsPayload = Vec<u8, COMMS_MAX_PAYLOAD>;
-pub type CommsFrameBuf = Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }>; // COMMS_HEADER_LEN=9 now
+pub type FramedBuf = Vec<u8, RX_BUF_SIZE>;
+type RxBuf = Vec<u8, RX_BUF_SIZE>;
+type DecodedBuf = Vec<u8, RX_BUF_SIZE>;
 
-/// Command identifiers for Comms messages.
+// ---- FCS error counter ---------------------------------------------------
+static FCS_ERROR_COUNT: AtomicU8 = AtomicU8::new(0);
+pub fn fcs_error_count() -> u8 { FCS_ERROR_COUNT.load(Ordering::Relaxed) }
+
+// ---- commands ------------------------------------------------------------
 #[repr(u16)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 pub enum Command {
-  Ack = 0x01,
-  Nak = 0x02,
-  Ping = 0x03,
-  Raw = 0x04,
+  Ack     = 0x01,
+  Nak     = 0x02,
+  Ping    = 0x03,
+  Raw     = 0x04,
   Version = 0x05,
 }
 
-impl From<Command> for u16 {
-  fn from(c: Command) -> Self {
-    c as u16
-  }
-}
+impl From<Command> for u16 { fn from(c: Command) -> u16 { c as u16 } }
 
-impl core::convert::TryFrom<u16> for Command {
-  type Error = ();
-  fn try_from(value: u16) -> Result<Self, Self::Error> {
-    match value {
-      0x01 => Ok(Command::Ack),
-      0x02 => Ok(Command::Nak),
-      0x03 => Ok(Command::Ping),
-      0x04 => Ok(Command::Raw),
-      0x05 => Ok(Command::Version),
-      _ => Err(()),
-    }
-  }
-}
-
-// Comms message format (little-endian):
-// - command:      u16
-// - id:           u8
-// - fragments:    u16 (total fragments)
-// - fragment:     u16 (0-based index)
-// - length:       u16  (payload length in bytes)
-// - payload:      [u8; length]
-
-pub const COMMS_HEADER_LEN: usize = 9;
-
+// ---- message -------------------------------------------------------------
 #[derive(Clone, Debug)]
 pub struct Message {
   pub command: u16,
-  pub id: u8,         // todo: future use
-  pub fragments: u16, // todo: future use
-  pub fragment: u16,  // todo: future use
-  pub length: u16,
+  pub id: u8,
+  pub fragments: u16,
+  pub fragment: u16,
   pub payload: CommsPayload,
 }
 
 impl Default for Message {
   fn default() -> Self {
-    Self {
-      command: 0,
-      id: 0,
-      fragments: 1,
-      fragment: 0,
-      length: 0,
-      payload: Vec::new(),
-    }
+    Self { command: 0, id: 0, fragments: 1, fragment: 0, payload: Vec::new() }
   }
 }
 
 impl Message {
-  /// Convenience constructor with defaults (id=0, fragments=1, fragment=1).
   pub fn new<C: Into<u16>>(command: C, payload: &[u8]) -> Self {
-    let mut buf: Vec<u8, COMMS_MAX_PAYLOAD> = Vec::new();
+    let mut buf: CommsPayload = Vec::new();
     let take = core::cmp::min(payload.len(), COMMS_MAX_PAYLOAD);
     let _ = buf.extend_from_slice(&payload[..take]);
-    Self {
-      command: command.into(),
-      id: 0,
-      fragments: 1,
-      fragment: 1,
-      length: take as u16,
-      payload: buf,
-    }
+    Self { command: command.into(), id: 0, fragments: 1, fragment: 1, payload: buf }
   }
+
+  /// `length` reported on the wire (always equals `payload.len()`).
+  pub fn length(&self) -> u16 { self.payload.len() as u16 }
 }
 
-// Queue of parsed Comms messages
+// ---- queue ---------------------------------------------------------------
 static COMMS_MSG_QUEUE: Channel<CriticalSectionRawMutex, Message, COMMS_QUEUE_DEPTH> = Channel::new();
 
-/// Build a Version reply echoing the request's id.
-/// Payload is the firmware version string from Cargo.toml at compile time.
+/// Read the next parsed message (non-blocking).
+pub fn read() -> Option<Message> { COMMS_MSG_QUEUE.try_receive().ok() }
+
+/// Await the next parsed message.
+pub async fn recv() -> Message { COMMS_MSG_QUEUE.receive().await }
+
+// ---- write ---------------------------------------------------------------
+/// Encode a [`Message`], HDLC-frame it, and write to the serial.
+pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
+  let mut buf: Vec<u8, { COMMS_HEADER_LEN + COMMS_MAX_PAYLOAD }> = Vec::new();
+  let len = msg.length();
+
+  let _ = buf.extend_from_slice(&msg.command.to_le_bytes());
+  let _ = buf.push(msg.id);
+  let _ = buf.extend_from_slice(&msg.fragments.to_le_bytes());
+  let _ = buf.extend_from_slice(&msg.fragment.to_le_bytes());
+  let _ = buf.extend_from_slice(&len.to_le_bytes());
+  let _ = buf.extend_from_slice(&msg.payload);
+
+  let mut framed: FramedBuf = Vec::new();
+  hdlc::hdlc_frame(&buf, &mut framed);
+  serial::write(serial, &framed);
+}
+
+// ---- canned replies ------------------------------------------------------
+/// Build a Version reply echoing the request's id; payload is `CARGO_PKG_VERSION`.
 pub fn version_reply(req: &Message) -> Message {
   let mut msg = Message::new(Command::Version, env!("CARGO_PKG_VERSION").as_bytes());
   msg.id = req.id;
   msg
 }
 
-/// Encode a Message and send over HDLC
-pub fn write<W: embedded_io::Write>(serial: &mut W, msg: &Message) {
-  // Build unframed message (header + payload)
-  let mut buf: CommsFrameBuf = Vec::new();
-  let len_usize = core::cmp::min(msg.payload.len(), COMMS_MAX_PAYLOAD);
-  let len: u16 = len_usize as u16; // Use actual payload length, not msg.length field
-
-  buf.extend_from_slice(&msg.command.to_le_bytes()).ok();
-  buf.push(msg.id).ok();
-  buf.extend_from_slice(&msg.fragments.to_le_bytes()).ok();
-  buf.extend_from_slice(&msg.fragment.to_le_bytes()).ok();
-  buf.extend_from_slice(&len.to_le_bytes()).ok();
-
-  buf.extend_from_slice(&msg.payload[..len_usize]).ok();
-
-  // HDLC-frame and write
-  let mut framed: FramedBuf = Vec::new();
-  hdlc::hdlc_frame(&buf, &mut framed);
-  serial::write(serial, &framed);
-}
-
-/// Async task: read bytes from serial queue, deframe, and publish decoded payloads
+// ---- consumer task -------------------------------------------------------
+/// Async task: pull raw bytes from the serial RX queue, deframe HDLC, parse
+/// messages, and enqueue them for the application.
 #[embassy_executor::task]
-pub async fn serial_hdlc_consumer_task() {
-  let mut rx_buf: ByteVec = Vec::new();
-  let mut decoded: ByteVec = Vec::new();
+pub async fn consumer_task() {
+  let mut rx_buf: RxBuf = Vec::new();
+  let mut decoded: DecodedBuf = Vec::new();
   loop {
-    // Wait for a new message from the serial RX queue
     let msg = serial::recv_raw().await;
-    // Append to buffer
-    rx_buf.extend_from_slice(&msg).ok();
-
-    // Safety check: clear buffer if it grows too large
-    if rx_buf.len() >= COMMS_BYTE_VEC_SIZE {
-      defmt::warn!("serial_hdlc_consumer_task: rx_buf overflow ({} bytes), clearing buffer", rx_buf.len());
+    if rx_buf.extend_from_slice(&msg).is_err() {
+      defmt::warn!("comm consumer: rx_buf overflow ({} bytes); resync", rx_buf.len());
       rx_buf.clear();
+      continue;
     }
 
-    // Try to decode HDLC frame(s)
-    let mut had_fcs_error = false;
-    while try_decode_hdlc(&mut rx_buf, &mut decoded) {
-      // Try to parse as a Comms frame and publish
-      if let Some(msg) = try_parse_comms_frame(&decoded) {
-        let _ = COMMS_MSG_QUEUE.try_send(msg);
+    loop {
+      match hdlc::hdlc_deframe(&mut rx_buf, &mut decoded) {
+        Ok(()) => {
+          if let Some(m) = parse_frame(&decoded) {
+            let _ = COMMS_MSG_QUEUE.try_send(m);
+          }
+        }
+        Err(hdlc::HdlcError::Incomplete) => break,
+        Err(hdlc::HdlcError::FcsMismatch { received, calculated, len }) => {
+          FCS_ERROR_COUNT.fetch_add(1, Ordering::Relaxed);
+          defmt::warn!(
+            "HDLC FCS error: recv={=u16:x}, calc={=u16:x}, len={}",
+            received, calculated, len
+          );
+          // Continue looking for the next frame; do NOT reset the MCU here —
+          // that's a policy decision left to the application.
+        }
       }
-      // If the last FCS error count increased, set flag
-      if fcs_error_count() > 0 {
-        had_fcs_error = true;
-      }
-    }
-    // If an FCS error occurred, clear the RX buffer to resync
-    if had_fcs_error {
-      defmt::warn!("Clearing RX buffer due to FCS error (frame resync)");
-      rx_buf.clear();
     }
   }
 }
 
-/// Read next parsed Comms message (non-blocking).
-pub fn read() -> Option<Message> {
-  COMMS_MSG_QUEUE.try_receive().ok()
+/// Convenience for binaries: spawn the consumer task. Call once after init.
+pub fn start(spawner: embassy_executor::Spawner) {
+  spawner.spawn(consumer_task().unwrap());
 }
 
-// --- Internal helpers ---
-
-/// Try to decode an HDLC frame from a buffer of received serial data
-fn try_decode_hdlc(buf: &mut ByteVec, out: &mut ByteVec) -> bool {
-  match hdlc::hdlc_deframe(buf, out) {
-    Ok(()) => true,
-    Err(hdlc::HdlcError::FcsMismatch { received, calculated, len }) => {
-      // Suppress warning for empty/incomplete frames (all zero)
-      if received != 0 || calculated != 0 || len != 0 {
-        FCS_ERROR_COUNT.fetch_add(1, Ordering::Relaxed);
-        defmt::warn!("HDLC FCS error: recv={=u16}, calc={=u16}, len={}", received, calculated, len);
-        // Reset the board immediately on FCS error
-        SCB::sys_reset();
-      }
-      false
-    }
+// ---- dispatch helper -----------------------------------------------------
+/// Handle one message: built-ins (Ping echo, Version reply) are answered
+/// automatically; everything else is forwarded to `user`. Returns the
+/// command id (`Ok`) so callers can drive their own LED/state machine.
+pub fn dispatch<F>(tx: &mut UartTx<'static, Async>, msg: &Message, mut user: F)
+where
+  F: FnMut(&Message, &mut UartTx<'static, Async>),
+{
+  use core::convert::TryFrom;
+  match Command::try_from(msg.command) {
+    Ok(Command::Ping) => write(tx, msg),
+    Ok(Command::Version) => write(tx, &version_reply(msg)),
+    _ => user(msg, tx),
   }
 }
 
-/// Try to parse a Comms message from a byte slice (little-endian)
-fn try_parse_comms_frame(bytes: &[u8]) -> Option<Message> {
+// ---- parse ---------------------------------------------------------------
+fn parse_frame(bytes: &[u8]) -> Option<Message> {
   if bytes.len() < COMMS_HEADER_LEN {
+    defmt::warn!("Frame too short: {} bytes", bytes.len());
     return None;
   }
-  let cmd = u16::from_le_bytes([bytes[0], bytes[1]]);
-  let id = bytes[2];
-  let frags = u16::from_le_bytes([bytes[3], bytes[4]]);
+  let cmd  = u16::from_le_bytes([bytes[0], bytes[1]]);
+  let id   = bytes[2];
+  let frags= u16::from_le_bytes([bytes[3], bytes[4]]);
   let frag = u16::from_le_bytes([bytes[5], bytes[6]]);
-  let len = u16::from_le_bytes([bytes[7], bytes[8]]) as usize;
-  let total = COMMS_HEADER_LEN + len;
+  let len  = u16::from_le_bytes([bytes[7], bytes[8]]) as usize;
 
-  // Check if frame has the expected length (header + payload)
-  if bytes.len() != total {
-    // Handle common case: extra 0x00 byte inserted after header
-    if bytes.len() == total + 1 && bytes.len() > COMMS_HEADER_LEN && bytes[COMMS_HEADER_LEN] == 0x00 {
-      defmt::warn!("Found extra 0x00 byte at position {}, skipping it", COMMS_HEADER_LEN);
-    } else {
-      defmt::warn!("Frame length mismatch: got {}, expected {}", bytes.len(), total);
-      return None;
-    }
+  if bytes.len() != COMMS_HEADER_LEN + len {
+    defmt::warn!("Frame length mismatch: got {}, header says {}+{}", bytes.len(), COMMS_HEADER_LEN, len);
+    return None;
+  }
+  if len > COMMS_MAX_PAYLOAD {
+    defmt::warn!("Payload {} > max {}", len, COMMS_MAX_PAYLOAD);
+    return None;
   }
 
   let mut payload: CommsPayload = Vec::new();
-  let copy = core::cmp::min(len, COMMS_MAX_PAYLOAD);
-
-  // Skip extra 0x00 byte if present (workaround for HDLC deframing issue)
-  let payload_start = if bytes.len() == total + 1 && bytes.len() > COMMS_HEADER_LEN && bytes[COMMS_HEADER_LEN] == 0x00 {
-    COMMS_HEADER_LEN + 1 // Skip the extra byte
-  } else {
-    COMMS_HEADER_LEN // Normal case
-  };
-
-  if bytes.len() >= payload_start + copy {
-    payload.extend_from_slice(&bytes[payload_start..payload_start + copy]).ok()?;
-  } else {
-    defmt::warn!("Not enough bytes for payload: need {}, have {}", payload_start + copy, bytes.len());
-    return None;
-  }
-
-  Some(Message {
-    command: cmd,
-    id,
-    fragments: frags,
-    fragment: frag,
-    length: len as u16,
-    payload,
-  })
+  payload.extend_from_slice(&bytes[COMMS_HEADER_LEN..COMMS_HEADER_LEN + len]).ok()?;
+  Some(Message { command: cmd, id, fragments: frags, fragment: frag, payload })
 }

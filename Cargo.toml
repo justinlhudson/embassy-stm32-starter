@@ -2,15 +2,24 @@
 edition = "2024"
 authors = ["Justin L. Hudson <justinlhudson@gmail.com>"]
 name = "embassy-stm32-starter"
-version = "0.0.1"
+version = "0.0.2"
 license = "MIT OR Apache-2.0"
 
 [lib]
 harness = false
+test = false
+bench = false
+doctest = false
 
 [[bin]]
 name = "example"
 path = "src/bin/example.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "relay"
+path = "src/bin/relay.rs"
 test = false
 bench = false
 
@@ -23,16 +32,10 @@ cortex-m-rt = "0.7.5"
 defmt = "1.1.0"
 defmt-rtt = "1.2.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-chrono = { version = "0.4.44", default-features = false }
-stm32f4xx-hal = { version = "0.23.0", features = ["{{STM32_FAMILY}}"] }
-# stm32f1xx-hal = { version = "0.11.0", features = ["{{STM32_FAMILY}}]}  # stm32f103"
-embassy-stm32 = { version = "0.6.0", features = [
+embassy-stm32 = { version = "0.6.0", default-features = false, features = [
   "defmt",
-  "{{STM32_MCU}}",
-  "memory-x",
   "time-driver-tim4",
   "exti",
-  "chrono",
   "rt",
 ] }
 embassy-sync = { version = "0.8.0", features = ["defmt"] }
@@ -47,13 +50,11 @@ embassy-time = { version = "0.5.1", features = [
   "defmt-timestamp-uptime",
   "tick-hz-32_768",
 ] }
+embassy-futures = "0.1"
+critical-section = "1.2"
 heapless = "0.9.3"
 embedded-io = "0.7.1"
-embedded-io-async = "0.7.0"
-embedded-storage = "0.3.1"
-
-[build-dependencies]
-cc = "1.2.62" # gcc for build.rs
+num_enum = { version = "0.7", default-features = false }
 
 [[test]]
 name = "integration"
@@ -64,22 +65,23 @@ name = "flash"
 harness = false
 
 [dev-dependencies]
-semihosting = "0.1.25" # for tests only
+semihosting = "0.1.25" # used by HIL tests
 
 [features]
-default = [
-  "hdlc_fcs",
-  "{{STM32_FAMILY}}",
-] # include HDLC FCS and MCU feature by default
-# default = []           # if you don't want HDLC FCS by default
+# Default targets the Nucleo-144 (STM32F413ZH). Override on the command line:
+#   cargo build --no-default-features --features "hdlc_fcs,stm32f446"
+default = ["hdlc_fcs", "stm32f413"]
+
+# Optional HDLC 16-bit FCS (CRC-16) check.
 hdlc_fcs = []
 
-# MCU family features for conditional compilation
-stm32f446 = [] # STM32F446RE (Nucleo-64)
-stm32f413 = [] # STM32F413ZH (Nucleo-144)
-stm32f1 = []   # STM32F1xx family (future)
-stm32f0 = []   # STM32F0xx family (future)
-stm32h7 = []   # STM32H7xx family (future)
+# MCU family selection (mutually exclusive — exactly one required).
+# Each pulls in the corresponding embassy-stm32 chip feature.
+stm32f413 = ["embassy-stm32/stm32f413zh"]
+stm32f446 = ["embassy-stm32/stm32f446re"]
+
+# Opt-in destructive HIL flash test.
+flash-destructive = []
 
 [profile.dev]
 opt-level = 0     # no optimizations

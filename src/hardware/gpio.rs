@@ -1,52 +1,19 @@
-/// GPIO Hardware Abstraction Layer
-///
-/// This module provides convenient utilities and constants for GPIO operations
-/// specific to the STM32F446RE microcontroller setup.
-use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
+//! GPIO defaults shared across boards.
+//!
+//! The previous `LedControl`/`ButtonReader` wrappers added no value over
+//! calling [`embassy_stm32::gpio::Output`]/[`Input`] methods directly, so
+//! they were removed. Use `led.set_high()`, `button.is_high()`, etc.
 
-/// LED control utilities
-pub struct LedControl;
+use embassy_stm32::gpio::{Level, Pull, Speed};
 
-impl LedControl {
-  /// Turn LED on
-  pub fn turn_on(led: &mut Output<'_>) {
-    led.set_high();
-  }
-
-  /// Turn LED off  
-  pub fn turn_off(led: &mut Output<'_>) {
-    led.set_low();
-  }
-
-  /// Toggle LED state
-  pub fn toggle(led: &mut Output<'_>) {
-    led.toggle();
-  }
-}
-
-/// Button reading utilities
-pub struct ButtonReader;
-
-impl ButtonReader {
-  /// Check if button is pressed
-  pub fn is_pressed(button: &Input<'_>) -> bool {
-    button.is_high()
-  }
-
-  /// Check if button is released
-  pub fn is_released(button: &Input<'_>) -> bool {
-    button.is_low()
-  }
-}
-
-/// GPIO configuration constants for embedded applications
 pub struct GpioDefaults;
 
 impl GpioDefaults {
-  /// Standard LED configuration
+  /// Default LED state at boot.
   pub const LED_LEVEL: Level = Level::Low;
+  /// Default LED slew rate.
   pub const LED_SPEED: Speed = Speed::Low;
-
-  /// Standard button configuration with pull-down
+  /// Default button pull (Nucleo B1 wiring varies; pull-down works for both
+  /// supported boards because the button drives the line high when pressed).
   pub const BUTTON_PULL: Pull = Pull::Down;
 }

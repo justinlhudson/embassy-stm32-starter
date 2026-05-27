@@ -1,253 +1,120 @@
-// Simple flash storage for STM32 using last sector
-/// Provides block read/write APIs for persistent storage
-use crate::board::BoardConfig;
-use core::ptr;
-use embassy_stm32::flash::Error;
+//! Persistent flash storage backed by the embassy-stm32 0.6 `Flash` driver.
+//!
+//! Storage region is defined per board via [`Board::FLASH_STORAGE_START`] /
+//! [`Board::FLASH_STORAGE_END`]. STM32F4 word-program is 4 bytes wide; this
+//! module pads write buffers up to 4-byte multiples.
+//!
+//! IMPORTANT: a 128 KB sector erase on STM32F4 can take ~4 seconds.
+//! Perform any erase **before** calling `wdt.unleash()`. The IWDG cannot be
+//! disarmed once running, which would cause a watchdog reset mid-erase.
 
-// Direct flash operations using register addresses (STM32 reference manual)
-// Flash register base addresses - conditional compilation based on MCU family
+use crate::board::{Board, BoardConfig};
+use core::cell::RefCell;
+use critical_section::Mutex;
+use embassy_stm32::flash::{Blocking, Flash};
+use embassy_stm32::peripherals::FLASH;
+use embassy_stm32::Peri;
 
-#[cfg(any(feature = "stm32f446", feature = "stm32f413"))]
-const FLASH_BASE: u32 = 0x40023C00; // STM32F4xx series
+/// Local error type so callers never depend on embassy's flash error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlashError {
+  /// Address/length out of bounds for the storage region.
+  OutOfRange,
+  /// Underlying flash driver reported an error.
+  Hardware,
+  /// Flash driver has not been initialized via [`init`].
+  Uninitialized,
+}
 
-#[cfg(feature = "stm32f1")]
-const FLASH_BASE: u32 = 0x40022000; // STM32F1xx series
+impl From<embassy_stm32::flash::Error> for FlashError {
+  fn from(_: embassy_stm32::flash::Error) -> Self {
+    FlashError::Hardware
+  }
+}
 
-#[cfg(feature = "stm32f0")]
-const FLASH_BASE: u32 = 0x40022000; // STM32F0xx series
+// A single global, blocking-mode flash handle. The embassy driver owns the
+// FLASH peripheral; we surface a process-wide accessor because flash ops are
+// inherently a global resource on STM32F4 (single bank).
+static FLASH_DRIVER: Mutex<RefCell<Option<Flash<'static, Blocking>>>> = Mutex::new(RefCell::new(None));
 
-#[cfg(feature = "stm32h7")]
-const FLASH_BASE: u32 = 0x52002000; // STM32H7xx series
+/// Hand the FLASH peripheral to this module. Call once at startup before any
+/// `read_block`/`write_block`/`erase`.
+pub fn init(p: Peri<'static, FLASH>) {
+  critical_section::with(|cs| {
+    *FLASH_DRIVER.borrow_ref_mut(cs) = Some(Flash::new_blocking(p));
+  });
+}
 
-// Default fallback for STM32F4 family if no specific feature is set
-#[cfg(not(any(feature = "stm32f446", feature = "stm32f413", feature = "stm32f1", feature = "stm32f0", feature = "stm32h7")))]
-const FLASH_BASE: u32 = 0x40023C00;
-
-const FLASH_KEYR: u32 = FLASH_BASE + 0x04;
-const FLASH_SR: u32 = FLASH_BASE + 0x0C;
-const FLASH_CR: u32 = FLASH_BASE + 0x10;
-
-// Flash keys for unlocking
-const FLASH_KEY1: u32 = 0x45670123;
-const FLASH_KEY2: u32 = 0xCDEF89AB;
-
-// Flash control register bits
-const FLASH_CR_PG: u32 = 1 << 0; // Programming
-const FLASH_CR_SER: u32 = 1 << 1; // Sector Erase  
-const FLASH_CR_STRT: u32 = 1 << 16; // Start
-const FLASH_CR_LOCK: u32 = 1 << 31; // Lock
-
-// Flash status register bits
-const FLASH_SR_BSY: u32 = 1 << 16; // Busy flag
-
-/// The start address of the storage region (last sector)
-pub fn start() -> u32 {
+/// Start of the storage region (absolute flash address).
+pub const fn start() -> u32 {
   BoardConfig::FLASH_STORAGE_START
 }
-
-/// The end address of the storage region
-pub fn end() -> u32 {
+/// End (exclusive) of the storage region.
+pub const fn end() -> u32 {
   BoardConfig::FLASH_STORAGE_END
 }
+/// Region size in bytes.
+pub const fn size() -> usize {
+  BoardConfig::FLASH_STORAGE_SIZE
+}
 
-/// Read a block of data from flash storage
-pub fn read_block(offset: usize, buf: &mut [u8]) -> Result<(), Error> {
-  let addr = start() + offset as u32;
-  let flash_ptr = addr as *const u8;
+/// Read `buf.len()` bytes starting at `offset` within the storage region.
+///
+/// `offset` is **relative to the storage region**, not absolute.
+pub fn read_block(offset: usize, buf: &mut [u8]) -> Result<(), FlashError> {
+  if offset + buf.len() > size() {
+    return Err(FlashError::OutOfRange);
+  }
+  // Memory-mapped read — works directly without a driver instance and is
+  // safe on STM32F4 as long as the address is within the flash window.
+  let src = (start() as usize + offset) as *const u8;
   unsafe {
-    ptr::copy_nonoverlapping(flash_ptr, buf.as_mut_ptr(), buf.len());
+    core::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), buf.len());
   }
   Ok(())
 }
 
-/// Direct flash erase using register manipulation (workaround for embassy-stm32 v0.4.0 bug)
-pub fn erase_sector_direct(sector_addr: u32) -> Result<(), Error> {
-  defmt::info!("Direct erase sector at address: 0x{:08X}", sector_addr);
-
-  unsafe {
-    // Unlock flash
-    unlock_flash();
-
-    // Wait for any ongoing operation
-    wait_flash_ready();
-
-    // Get sector number from address
-    let sector = get_sector_number(sector_addr)?;
-    defmt::info!("Erasing sector {}", sector);
-
-    // Configure sector erase
-    let cr_reg = FLASH_CR as *mut u32;
-    let mut cr_value = cr_reg.read_volatile();
-    cr_value &= !(0xF << 3); // Clear SNB bits
-    cr_value |= (sector << 3) & (0xF << 3); // Set sector number
-    cr_value |= FLASH_CR_SER; // Set sector erase bit
-    cr_reg.write_volatile(cr_value);
-
-    // Start erase operation
-    cr_value = cr_reg.read_volatile();
-    cr_value |= FLASH_CR_STRT;
-    cr_reg.write_volatile(cr_value);
-
-    // Wait for completion
-    wait_flash_ready();
-
-    // Clear erase bit and lock flash
-    let cr_reg = FLASH_CR as *mut u32;
-    let mut cr_value = cr_reg.read_volatile();
-    cr_value &= !FLASH_CR_SER;
-    cr_reg.write_volatile(cr_value);
-    lock_flash();
+/// Write `data` at absolute address `addr` (must be inside the storage region).
+/// Length must be a multiple of 4 bytes (STM32F4 word-program). Caller is
+/// responsible for ensuring the target region was erased first.
+pub fn write_block(addr: u32, data: &[u8]) -> Result<(), FlashError> {
+  if addr < start() || addr + data.len() as u32 > end() {
+    return Err(FlashError::OutOfRange);
   }
-
-  defmt::info!("✅ Direct sector erase completed");
-  Ok(())
+  if !data.len().is_multiple_of(4) {
+    defmt::warn!("flash write length {} not a multiple of 4; pad in caller", data.len());
+    return Err(FlashError::OutOfRange);
+  }
+  let offset = addr; // embassy's blocking_write takes an offset from FLASH base (0x08000000)
+  let offset_from_base = offset - 0x0800_0000;
+  critical_section::with(|cs| {
+    let mut borrow = FLASH_DRIVER.borrow_ref_mut(cs);
+    let f = borrow.as_mut().ok_or(FlashError::Uninitialized)?;
+    f.blocking_write(offset_from_base, data).map_err(Into::into)
+  })
 }
 
-/// Write a block of data to flash using direct register access (workaround for embassy-stm32 v0.4.0 bug)
-pub fn write_block(addr: u32, data: &[u8]) -> Result<(), Error> {
-  defmt::info!("Direct write {} bytes to address: 0x{:08X}", data.len(), addr);
+/// Erase the entire storage region. This is a long-running synchronous
+/// operation (up to several seconds on STM32F4) — do it before unleashing
+/// the IWDG. Despite the cost, this is a plain (non-async) blocking call
+/// because the embassy STM32F4 flash driver has no async erase.
+pub fn erase() -> Result<(), FlashError> {
+  defmt::warn!("Flash erase 0x{:08X}..0x{:08X} (may take ~4s)...", start(), end());
+  let from = start() - 0x0800_0000;
+  let to = end() - 0x0800_0000;
+  let result = critical_section::with(|cs| {
+    let mut borrow = FLASH_DRIVER.borrow_ref_mut(cs);
+    let f = borrow.as_mut().ok_or(FlashError::Uninitialized)?;
+    f.blocking_erase(from, to).map_err(Into::into)
+  });
 
-  // STM32F4 supports byte programming, so no strict alignment required
-  defmt::info!("Programming {} bytes starting at 0x{:08X}", data.len(), addr);
-
-  unsafe {
-    // Unlock flash
-    unlock_flash();
-
-    // Enable programming
-    let cr_reg = FLASH_CR as *mut u32;
-    let mut cr_value = cr_reg.read_volatile();
-    cr_value |= FLASH_CR_PG;
-    cr_reg.write_volatile(cr_value);
-
-    // Write data byte by byte (STM32F4 supports byte programming)
-    for (i, &byte) in data.iter().enumerate() {
-      wait_flash_ready();
-
-      let byte_addr = addr + i as u32;
-      defmt::debug!("Writing byte {} = 0x{:02X} to address 0x{:08X}", i, byte, byte_addr);
-
-      // Write the byte directly
-      let write_ptr = byte_addr as *mut u8;
-      write_ptr.write_volatile(byte);
-
-      // Wait for this byte to be written
-      wait_flash_ready();
-
-      // Verify immediately after writing
-      let read_back = *(write_ptr as *const u8);
-      if read_back != byte {
-        defmt::error!("Flash write verification failed at offset {}: wrote 0x{:02X}, read 0x{:02X}", i, byte, read_back);
-      } else {
-        defmt::debug!("Byte {} verified OK", i);
-      }
-    }
-
-    // Wait for final operation and clean up
-    wait_flash_ready();
-
-    // Disable programming and lock flash
-    let mut cr_value = cr_reg.read_volatile();
-    cr_value &= !FLASH_CR_PG;
-    cr_reg.write_volatile(cr_value);
-    lock_flash();
-  }
-
-  defmt::info!("✅ Direct flash write completed");
-  Ok(())
-}
-
-/// Helper functions for direct flash operations
-unsafe fn unlock_flash() {
-  let keyr_reg = FLASH_KEYR as *mut u32;
-  unsafe {
-    keyr_reg.write_volatile(FLASH_KEY1);
-    keyr_reg.write_volatile(FLASH_KEY2);
-  }
-}
-
-unsafe fn lock_flash() {
-  let cr_reg = FLASH_CR as *mut u32;
-  unsafe {
-    let mut cr_value = cr_reg.read_volatile();
-    cr_value |= FLASH_CR_LOCK;
-    cr_reg.write_volatile(cr_value);
-  }
-}
-
-unsafe fn wait_flash_ready() {
-  let sr_reg = FLASH_SR as *const u32;
-  unsafe {
-    while (sr_reg.read_volatile() & FLASH_SR_BSY) != 0 {
-      // Wait for flash to become ready
+  if result.is_ok() {
+    let mut buf = [0u8; 16];
+    if read_block(0, &mut buf).is_ok() && buf.iter().all(|&b| b == 0xFF) {
+      defmt::info!("Flash erase OK (verified 0xFF prefix)");
+    } else {
+      defmt::error!("Flash erase verification failed: {:?}", buf);
     }
   }
-}
-
-fn get_sector_number(addr: u32) -> Result<u32, Error> {
-  // STM32F4 sector mapping
-  match addr {
-    0x08000000..=0x08003FFF => Ok(0), // Sector 0: 16KB
-    0x08004000..=0x08007FFF => Ok(1), // Sector 1: 16KB
-    0x08008000..=0x0800BFFF => Ok(2), // Sector 2: 16KB
-    0x0800C000..=0x0800FFFF => Ok(3), // Sector 3: 16KB
-    0x08010000..=0x0801FFFF => Ok(4), // Sector 4: 64KB
-    0x08020000..=0x0803FFFF => Ok(5), // Sector 5: 128KB
-    0x08040000..=0x0805FFFF => Ok(6), // Sector 6: 128KB
-    0x08060000..=0x0807FFFF => Ok(7), // Sector 7: 128KB
-
-    // STM32F413ZH additional sectors
-    0x08080000..=0x0809FFFF => Ok(8),  // Sector 8: 128KB
-    0x080A0000..=0x080BFFFF => Ok(9),  // Sector 9: 128KB
-    0x080C0000..=0x080DFFFF => Ok(10), // Sector 10: 128KB
-    0x080E0000..=0x080FFFFF => Ok(11), // Sector 11: 128KB
-    0x08100000..=0x0811FFFF => Ok(12), // Sector 12: 128KB
-    0x08120000..=0x0813FFFF => Ok(13), // Sector 13: 128KB
-    0x08140000..=0x0815FFFF => Ok(14), // Sector 14: 128KB
-    0x08160000..=0x0817FFFF => Ok(15), // Sector 15: 128KB (F413ZH)
-
-    _ => {
-      defmt::error!("Invalid flash address: 0x{:08X}", addr);
-      Err(Error::Size)
-    }
-  }
-}
-
-/// Erase the flash storage sector
-/// WARNING: Executing a flash erase while running from flash can cause immediate MCU reset.
-/// The MCU may repeatedly reset and drop serial until the next successful start completes.
-pub async fn erase() -> Result<(), Error> {
-  defmt::info!("🔥 Flash Sector Erase");
-  defmt::warn!("===============================================================");
-  defmt::warn!("FLASH ERASE IN PROGRESS – MCU WILL RESET DURING THIS OPERATION");
-  defmt::warn!("===============================================================");
-
-  let storage_start = start();
-  defmt::info!("Erasing flash sector at address: 0x{:08X}", storage_start);
-
-  match erase_sector_direct(storage_start) {
-    Ok(()) => {
-      defmt::info!("✅ Flash sector erase completed successfully!");
-
-      // Verify erase by reading a few bytes
-      let mut buffer = [0u8; 16];
-      match read_block(0, &mut buffer) {
-        Ok(()) => {
-          if buffer.iter().all(|&b| b == 0xFF) {
-            defmt::info!("✅ Flash properly erased - all bytes are 0xFF");
-          } else {
-            defmt::info!("❌ Flash erase verification failed: {:?}", buffer);
-          }
-        }
-        Err(_) => {
-          defmt::info!("❌ Failed to read flash after erase");
-        }
-      }
-      Ok(())
-    }
-    Err(e) => {
-      defmt::info!("❌ Flash sector erase failed");
-      Err(e)
-    }
-  }
+  result
 }

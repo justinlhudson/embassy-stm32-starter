@@ -1,16 +1,16 @@
-//! Minimal HDLC framing/deframing for serial communication
-// Uses the standard HDLC flag (0x7E) and escape (0x7D) bytes.
-// Includes optional PPP/HDLC 16-bit FCS (CRC-16, poly 0x8408), compile-time toggle.
+//! Minimal HDLC framing for serial communication.
+//!
+//! Uses the standard HDLC flag (0x7E) and escape (0x7D) bytes.
+//! Optional PPP/HDLC 16-bit FCS (CRC-16, poly 0x8408) is enabled with the
+//! `hdlc_fcs` cargo feature; otherwise the FCS field is omitted.
 
 pub const HDLC_FLAG: u8 = 0x7E;
 pub const HDLC_ESCAPE: u8 = 0x7D;
 pub const HDLC_XOR: u8 = 0x20;
 
-/// Compute PPP/HDLC 16-bit FCS.
-/// Polynomial 0x8408 (reversed 0x1021), init 0xFFFF, reflected, final XOR 0xFFFF.
-/// Returns the 16-bit FCS value to append (already complemented).
+/// PPP/HDLC 16-bit FCS: poly 0x8408, init 0xFFFF, reflected, final XOR 0xFFFF.
 #[cfg(feature = "hdlc_fcs")]
-fn fcs16_ppp(data: &[u8]) -> u16 {
+pub fn fcs16_ppp(data: &[u8]) -> u16 {
   let mut fcs: u16 = 0xFFFF;
   for &b in data {
     let mut x = (fcs ^ (b as u16)) & 0x00FF;
@@ -26,122 +26,118 @@ fn fcs16_ppp(data: &[u8]) -> u16 {
   !fcs
 }
 
-/// Frame a payload into an HDLC frame (adds flag, escapes as needed, appends 16-bit FCS)
-pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>) {
-  out.clear();
-  out.push(HDLC_FLAG).ok();
-
-  // Compute FCS (PPP/HDLC) if enabled; otherwise 0
-  #[cfg(feature = "hdlc_fcs")]
-  let fcs = fcs16_ppp(payload);
-  #[cfg(not(feature = "hdlc_fcs"))]
-  let fcs: u16 = 0;
-
-  // Write payload
-  for &b in payload {
-    match b {
-      HDLC_FLAG | HDLC_ESCAPE => {
-        out.push(HDLC_ESCAPE).ok();
-        out.push(b ^ HDLC_XOR).ok();
-      }
-      _ => {
-        out.push(b).ok();
-      }
+#[inline]
+fn push_escaped<const N: usize>(out: &mut heapless::Vec<u8, N>, b: u8) {
+  match b {
+    HDLC_FLAG | HDLC_ESCAPE => {
+      let _ = out.push(HDLC_ESCAPE);
+      let _ = out.push(b ^ HDLC_XOR);
+    }
+    _ => {
+      let _ = out.push(b);
     }
   }
-  // Write FCS (little-endian, escaped)
-  for &b in &fcs.to_le_bytes() {
-    match b {
-      HDLC_FLAG | HDLC_ESCAPE => {
-        out.push(HDLC_ESCAPE).ok();
-        out.push(b ^ HDLC_XOR).ok();
-      }
-      _ => {
-        out.push(b).ok();
-      }
-    }
-  }
-  out.push(HDLC_FLAG).ok();
 }
 
-/// HDLC deframe error type
+/// Frame a payload (adds opening flag, escapes payload [+ FCS], closing flag).
+pub fn hdlc_frame<const M: usize>(payload: &[u8], out: &mut heapless::Vec<u8, M>) {
+  out.clear();
+  let _ = out.push(HDLC_FLAG);
+
+  for &b in payload {
+    push_escaped(out, b);
+  }
+
+  #[cfg(feature = "hdlc_fcs")]
+  for &b in &fcs16_ppp(payload).to_le_bytes() {
+    push_escaped(out, b);
+  }
+
+  let _ = out.push(HDLC_FLAG);
+}
+
+/// Deframe error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HdlcError {
+  /// No complete frame in the buffer yet.
+  Incomplete,
+  /// Frame received but FCS check failed.
   FcsMismatch { received: u16, calculated: u16, len: usize },
 }
 
-/// Deframe HDLC data (returns Ok(()) if a full frame is found and FCS is valid when enabled, Err(HdlcError) on error)
+/// Try to extract one HDLC frame from `buf`. On success, `out` holds the
+/// (un-escaped, FCS-stripped) payload and the consumed bytes are removed from
+/// `buf`. On `Incomplete`, `buf` is left untouched up to the first flag (so
+/// the caller can simply append more bytes and retry). On `FcsMismatch`, the
+/// bad frame is consumed from `buf`.
 pub fn hdlc_deframe<const N: usize, const M: usize>(buf: &mut heapless::Vec<u8, N>, out: &mut heapless::Vec<u8, M>) -> Result<(), HdlcError> {
-  let mut in_frame = false;
-  let mut escape = false;
   out.clear();
-  let mut i = 0;
-  while i < buf.len() {
-    let b = buf[i];
-    if !in_frame {
-      if b == HDLC_FLAG {
-        in_frame = true;
-        out.clear();
-      }
-    } else {
-      if escape {
-        out.push(b ^ HDLC_XOR).ok();
-        escape = false;
-      } else if b == HDLC_ESCAPE {
-        escape = true;
-      } else if b == HDLC_FLAG {
-        if out.len() >= 2 {
-          // Remove processed bytes from buf (shift remaining bytes)
-          if i + 1 < buf.len() {
-            let remaining = buf.len() - (i + 1);
-            for j in 0..remaining {
-              buf[j] = buf[i + 1 + j];
-            }
-            buf.truncate(remaining);
-          } else {
-            buf.clear();
-          }
-          // Split payload and FCS
-          let payload_len = out.len() - 2;
-          let (payload, fcs_bytes) = out.split_at(payload_len);
-          let fcs_recv = u16::from_le_bytes([fcs_bytes[0], fcs_bytes[1]]);
 
-          #[cfg(feature = "hdlc_fcs")]
-          {
-            let fcs_calc = fcs16_ppp(payload);
-            if fcs_recv == fcs_calc {
-              out.truncate(payload_len);
-              return Ok(());
-            } else {
-              out.clear();
-              defmt::error!("HDLC FCS mismatch: recv={=u16}, calc={=u16}, len={}", fcs_recv, fcs_calc, payload_len);
-              return Err(HdlcError::FcsMismatch {
-                received: fcs_recv,
-                calculated: fcs_calc,
-                len: payload_len,
-              });
-            }
-          }
-          #[cfg(not(feature = "hdlc_fcs"))]
-          {
-            let _ = payload; // suppress unused when FCS disabled
-            let _ = fcs_recv; // suppress unused when FCS disabled
-            // FCS disabled: accept frame without verification (strip trailing 2 bytes)
-            out.truncate(payload_len);
-            return Ok(());
-          }
-        }
-        // else: empty frame, ignore
-        in_frame = false;
-      } else {
-        out.push(b).ok();
-      }
+  // Find opening flag.
+  let start = match buf.iter().position(|&b| b == HDLC_FLAG) {
+    Some(p) => p,
+    None => {
+      buf.clear();
+      return Err(HdlcError::Incomplete);
     }
+  };
+
+  // Find closing flag after the opening one. Skip consecutive flags so two
+  // back-to-back 0x7E (idle / inter-frame) don't yield an empty frame loop.
+  let mut i = start + 1;
+  while i < buf.len() && buf[i] == HDLC_FLAG {
     i += 1;
   }
-  Err(HdlcError::FcsMismatch {
-    received: 0,
-    calculated: 0,
-    len: 0,
-  }) // No frame found or incomplete
+  let payload_start = i;
+  let end = match buf[payload_start..].iter().position(|&b| b == HDLC_FLAG) {
+    Some(p) => payload_start + p,
+    None => {
+      // Drop anything before the opening flag, keep the rest for next time.
+      if start > 0 {
+        buf.copy_within(start.., 0);
+        buf.truncate(buf.len() - start);
+      }
+      return Err(HdlcError::Incomplete);
+    }
+  };
+
+  // Un-escape the slice [payload_start..end] into `out`.
+  let mut escape = false;
+  for &b in &buf[payload_start..end] {
+    if escape {
+      let _ = out.push(b ^ HDLC_XOR);
+      escape = false;
+    } else if b == HDLC_ESCAPE {
+      escape = true;
+    } else {
+      let _ = out.push(b);
+    }
+  }
+
+  // Consume up to and including the closing flag.
+  let consumed = end + 1;
+  buf.copy_within(consumed.., 0);
+  buf.truncate(buf.len() - consumed);
+
+  // Validate FCS (when enabled).
+  #[cfg(feature = "hdlc_fcs")]
+  {
+    if out.len() < 2 {
+      return Err(HdlcError::Incomplete);
+    }
+    let payload_len = out.len() - 2;
+    let fcs_recv = u16::from_le_bytes([out[payload_len], out[payload_len + 1]]);
+    let fcs_calc = fcs16_ppp(&out[..payload_len]);
+    if fcs_recv != fcs_calc {
+      out.clear();
+      return Err(HdlcError::FcsMismatch {
+        received: fcs_recv,
+        calculated: fcs_calc,
+        len: payload_len,
+      });
+    }
+    out.truncate(payload_len);
+  }
+
+  Ok(())
 }

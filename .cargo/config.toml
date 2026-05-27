@@ -1,13 +1,13 @@
-# config.toml template for MCU configuration
-# Managed by setup script
-
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 linker = "arm-none-eabi-ld"
+# Default runner targets the default-feature chip (STM32F413ZH).
+# For other boards, prefer `./flash.sh` which detects the chip and passes the
+# right `--features` and `--chip` automatically.
 runner = [
   "probe-rs",
   "run",
   "--chip",
-  "{{CHIP_NAME}}",
+  "STM32F413ZH",
   "--catch-hardfault",
   "--catch-reset",
   "--rtt-scan-memory",
@@ -15,14 +15,10 @@ runner = [
 ]
 
 rustflags = [
-  "-C",
-  "linker=flip-link",   # use flip-link as linker
-  "-C",
-  "link-arg=-Tlink.x",  # linker script, linker.x
-  "-C",
-  "link-arg=-Tdefmt.x", # for defmt support
-  "-C",
-  "link-arg=--nmagic",  # avoids page alignment
+  "-C", "linker=flip-link",
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tdefmt.x",
+  "-C", "link-arg=--nmagic",
 ]
 
 [env]
@@ -32,7 +28,7 @@ DEFMT_LOG = "trace"
 target = "thumbv7em-none-eabihf"
 
 [alias]
-cb = "clean"
-bx = "build --bin"
+cb    = "clean"
+bx    = "build --bin"
 start = "run --bin"
 tests = "test --test"
