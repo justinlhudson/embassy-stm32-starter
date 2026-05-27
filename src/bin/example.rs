@@ -30,12 +30,18 @@ async fn main(_spawner: Spawner) {
   let p = embassy_stm32::init(config);
   let (led, button, mut wdt, rtc, comm) = BoardConfig::init_all_hardware(_spawner, p);
 
-  // Demonstrate flash storage functionality
+  // Demonstrate flash storage functionality.
+  // IMPORTANT: flash erase (128KB sector) can take up to 4s on STM32F4.
+  // Run flash ops BEFORE unleashing the IWDG; the IWDG cannot be stopped
+  // once started, so starting it first would cause a watchdog reset mid-erase.
   flash_demo().await;
 
-  _spawner.spawn(button_monitor(button)).ok();
-  _spawner.spawn(rtc_clock(rtc)).ok();
-  _spawner.spawn(comm_task(comm, led)).ok();
+  // Now that flash operations are done, start the watchdog.
+  wdt.unleash();
+
+  _spawner.spawn(button_monitor(button).unwrap());
+  _spawner.spawn(rtc_clock(rtc).unwrap());
+  _spawner.spawn(comm_task(comm, led).unwrap());
 
   info!("U ready? U ain't ready!");
   let mut last_sp: u32 = 0;

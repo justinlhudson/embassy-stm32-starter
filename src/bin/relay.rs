@@ -15,12 +15,13 @@ async fn main(spawner: Spawner) {
 
   let p = embassy_stm32::init(Config::default());
   let (led, button, mut wdt, _rtc, comm) = BoardConfig::init_all_hardware(spawner, p);
+  wdt.unleash(); // No flash operations here, so start watchdog immediately
 
   // Create D8 output (Arduino D8 = PA9 on Nucleo-F446RE)
   let p2 = unsafe { embassy_stm32::Peripherals::steal() };
   let d8 = Output::new(p2.PA9, GpioDefaults::LED_LEVEL, GpioDefaults::LED_SPEED);
 
-  spawner.spawn(operation_task(comm, led, d8, button)).ok();
+  spawner.spawn(operation_task(comm, led, d8, button).unwrap());
 
   loop {
     wdt.pet();

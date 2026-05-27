@@ -85,9 +85,12 @@ impl BoardConfig {
     let button = Input::new(p.PC13, GpioDefaults::BUTTON_PULL);
 
     // Watchdog and RTC
-    let mut wdt = IndependentWatchdog::new(p.IWDG, Self::WATCHDOG_TIMEOUT_US);
+    // NOTE: wdt.unleash() is intentionally NOT called here.
+    // Flash erase (128KB sector, STM32F4) can take up to 4 seconds.
+    // The IWDG cannot be stopped once started, so the caller must call
+    // wdt.unleash() AFTER any flash operations to avoid a watchdog reset.
+    let wdt = IndependentWatchdog::new(p.IWDG, Self::WATCHDOG_TIMEOUT_US);
     let (rtc, _) = Rtc::new(p.RTC, RtcConfig::default());
-    wdt.unleash();
 
     // Serial (USART2 on PA2/PA3)
     let comm = serial::init_serial(
