@@ -65,18 +65,6 @@ This workspace uses the `probe-rs-debug` VS Code debug adapter, not CodeLLDB.
 Install the recommended `probe-rs.probe-rs-debugger` extension when VS Code
 prompts for workspace recommendations.
 
-Use the Run and Debug panel and select one of these launch configurations:
-
-- `Debug example (STM32F413ZH)`
-- `Debug relay (STM32F413ZH)`
-- `Debug example (STM32F446RE)`
-- `Debug relay (STM32F446RE)`
-
-Each configuration runs the matching Cargo build task first, flashes the ELF,
-and starts a hardware debug session through `probe-rs-debug`. If VS Code reports
-that it cannot find LLDB/CodeLLDB, you selected an LLDB launch target instead of
-one of the `probe-rs-debug` targets above.
-
 ## Build & Flash
 
 ### Auto-detect board
@@ -92,8 +80,7 @@ one of the `probe-rs-debug` targets above.
 ### Manual
 
 ```bash
-cargo build --release --no-default-features --features stm32f413,hdlc_fcs
-cargo build --release --no-default-features --features stm32f446,hdlc_fcs
+cargo build --release --no-default-features --features stm32f413
 ```
 
 ## Run Tests
@@ -117,9 +104,6 @@ For STM32F446RE, select `stm32f446` and set a `probe-rs` runner with
 | `stm32f446`         | Target STM32F446RE (Nucleo-64)                         |
 | `hdlc_fcs`          | Append/verify CRC-16 FCS on every HDLC frame           |
 | `flash-destructive` | Allow the `flash` HIL test to erase + write the sector |
-
-Exactly one MCU feature must be enabled; the build will `compile_error!`
-otherwise.
 
 ## Communication Protocol
 
