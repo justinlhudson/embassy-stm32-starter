@@ -1,37 +1,81 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "probe-rs-debug",
+      "request": "launch",
+      "name": "Debug example (STM32F413ZH)",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo-build-example-stm32f413",
+      "connectUnderReset": true,
+      "chip": "STM32F413ZH",
+      "flashingConfig": {
+        "flashingEnabled": true,
+        "haltAfterReset": true
+      },
+      "coreConfigs": [
         {
-            "type": "probe-rs-debug",
-            "request": "launch",
-            "name": "Debug Any Binary (probe-rs-debug)",
-            "cwd": "${workspaceFolder}",
-            "connectUnderReset": true,
-            "chip": "${input:chipName}",
-            "flashingConfig": {
-                "flashingEnabled": true,
-                "haltAfterReset": true
-            },
-            "coreConfigs": [
-                {
-                    "coreIndex": 0,
-                    "programBinary": "./target/thumbv7em-none-eabihf/debug/${input:binaryName}"
-                }
-            ]
+          "coreIndex": 0,
+          "programBinary": "${workspaceFolder}/target/thumbv7em-none-eabihf/debug/example"
         }
-    ],
-    "inputs": [
+      ]
+    },
+    {
+      "type": "probe-rs-debug",
+      "request": "launch",
+      "name": "Debug relay (STM32F413ZH)",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo-build-relay-stm32f413",
+      "connectUnderReset": true,
+      "chip": "STM32F413ZH",
+      "flashingConfig": {
+        "flashingEnabled": true,
+        "haltAfterReset": true
+      },
+      "coreConfigs": [
         {
-            "id": "binaryName",
-            "type": "promptString",
-            "description": "Binary name (e.g. example, relay)"
-        },
-        {
-            "id": "chipName",
-            "type": "pickString",
-            "description": "Target chip",
-            "options": [ "STM32F413ZH", "STM32F446RE" ],
-            "default": "STM32F413ZH"
+          "coreIndex": 0,
+          "programBinary": "${workspaceFolder}/target/thumbv7em-none-eabihf/debug/relay"
         }
-    ]
+      ]
+    },
+    {
+      "type": "probe-rs-debug",
+      "request": "launch",
+      "name": "Debug example (STM32F446RE)",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo-build-example-stm32f446",
+      "connectUnderReset": true,
+      "chip": "STM32F446RE",
+      "flashingConfig": {
+        "flashingEnabled": true,
+        "haltAfterReset": true
+      },
+      "coreConfigs": [
+        {
+          "coreIndex": 0,
+          "programBinary": "${workspaceFolder}/target/thumbv7em-none-eabihf/debug/example"
+        }
+      ]
+    },
+    {
+      "type": "probe-rs-debug",
+      "request": "launch",
+      "name": "Debug relay (STM32F446RE)",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo-build-relay-stm32f446",
+      "connectUnderReset": true,
+      "chip": "STM32F446RE",
+      "flashingConfig": {
+        "flashingEnabled": true,
+        "haltAfterReset": true
+      },
+      "coreConfigs": [
+        {
+          "coreIndex": 0,
+          "programBinary": "${workspaceFolder}/target/thumbv7em-none-eabihf/debug/relay"
+        }
+      ]
+    }
+  ]
 }

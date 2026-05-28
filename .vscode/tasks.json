@@ -1,18 +1,86 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "cargo-check",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"check"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$rustc"
-			],
-			"group": "build"
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cargo-check",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "check"
+      ],
+      "isBackground": false,
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build"
+    },
+    {
+      "label": "cargo-build-example-stm32f413",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--bin",
+        "example",
+        "--no-default-features",
+        "--features",
+        "stm32f413,hdlc_fcs"
+      ],
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build"
+    },
+    {
+      "label": "cargo-build-relay-stm32f413",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--bin",
+        "relay",
+        "--no-default-features",
+        "--features",
+        "stm32f413,hdlc_fcs"
+      ],
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build"
+    },
+    {
+      "label": "cargo-build-example-stm32f446",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--bin",
+        "example",
+        "--no-default-features",
+        "--features",
+        "stm32f446,hdlc_fcs"
+      ],
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build"
+    },
+    {
+      "label": "cargo-build-relay-stm32f446",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--bin",
+        "relay",
+        "--no-default-features",
+        "--features",
+        "stm32f446,hdlc_fcs"
+      ],
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build"
+    }
+  ]
 }

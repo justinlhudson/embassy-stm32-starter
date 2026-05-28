@@ -59,6 +59,24 @@ embassy-stm32-starter/
     └── flash.rs              # destructive ops behind `flash-destructive` feature
 ```
 
+## VS Code Debugging
+
+This workspace uses the `probe-rs-debug` VS Code debug adapter, not CodeLLDB.
+Install the recommended `probe-rs.probe-rs-debugger` extension when VS Code
+prompts for workspace recommendations.
+
+Use the Run and Debug panel and select one of these launch configurations:
+
+- `Debug example (STM32F413ZH)`
+- `Debug relay (STM32F413ZH)`
+- `Debug example (STM32F446RE)`
+- `Debug relay (STM32F446RE)`
+
+Each configuration runs the matching Cargo build task first, flashes the ELF,
+and starts a hardware debug session through `probe-rs-debug`. If VS Code reports
+that it cannot find LLDB/CodeLLDB, you selected an LLDB launch target instead of
+one of the `probe-rs-debug` targets above.
+
 ## Build & Flash
 
 ### Auto-detect board
@@ -77,6 +95,19 @@ embassy-stm32-starter/
 cargo build --release --no-default-features --features stm32f413,hdlc_fcs
 cargo build --release --no-default-features --features stm32f446,hdlc_fcs
 ```
+
+## Run Tests
+
+Tests in `tests/` are no-std hardware-in-the-loop (HIL) binaries, so they run
+on the target MCU via `probe-rs` (not on your host CPU).
+
+```bash
+cargo test --test integration
+cargo test --test flash
+```
+
+For STM32F446RE, select `stm32f446` and set a `probe-rs` runner with
+`--chip STM32F446RE`.
 
 ## Features
 
